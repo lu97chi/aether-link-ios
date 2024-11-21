@@ -1,24 +1,43 @@
-//
-//  ContentView.swift
-//  aether-link
-//
-//  Created by Luis Roberto Hernandez Robles on 18/11/24.
-//
+// ContentView.swift
 
 import SwiftUI
 
 struct ContentView: View {
+    // Tracks whether the user has seen the onboarding screens
+    @State private var showOnboarding: Bool = !UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
+    
+    // Instantiate BluetoothManager and SocketIOManager
+    @StateObject private var bluetoothManager = BluetoothManager()
+    @StateObject private var socketIOManager = SocketIOManager()
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        Group {
+            if showOnboarding {
+                OnboardingContainerView(showOnboarding: $showOnboarding)
+                    .onDisappear {
+                        // Mark onboarding as seen
+                        UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                    }
+            } else {
+                MainView()
+                    .environmentObject(bluetoothManager)    // Pass BluetoothManager to main content
+                    .environmentObject(socketIOManager)      // Pass SocketIOManager to main content
+            }
         }
-        .padding()
+        .onAppear {
+            // Optionally, start the Socket.IO connection here
+            // socketIOManager.connect()
+            
+            // Optionally, start Bluetooth scanning here or handle any initial setup
+            // bluetoothManager.startScanning()
+        }
     }
 }
 
-#Preview {
-    ContentView()
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+            .environmentObject(BluetoothManager())
+            .environmentObject(SocketIOManager())
+    }
 }
