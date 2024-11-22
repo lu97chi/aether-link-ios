@@ -17,7 +17,7 @@ class SocketIOManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.0.234:3000")!
+    private let serverURL = URL(string: "http://192.168.100.100:1337")!
     
     // MARK: - Initializer
     init() {
@@ -71,22 +71,12 @@ class SocketIOManager: ObservableObject {
             }
         }
         
-        // Handle custom event "copyResponse"
-        socket.on("copyResponse") { [weak self] data, ack in
-            if let response = data.first as? String {
-                print("Copy Response: \(response)")
+        // Handle custom event "message"
+        socket.on("status") { [weak self] data, ack in
+            if let message = data.first as? String {
+                print("Received message: \(message)")
                 DispatchQueue.main.async {
-                    self?.receivedMessage = "Copy: \(response)"
-                }
-            }
-        }
-        
-        // Handle custom event "deleteResponse"
-        socket.on("deleteResponse") { [weak self] data, ack in
-            if let response = data.first as? String {
-                print("Delete Response: \(response)")
-                DispatchQueue.main.async {
-                    self?.receivedMessage = "Delete: \(response)"
+                    self?.receivedMessage = message
                 }
             }
         }
@@ -115,21 +105,8 @@ class SocketIOManager: ObservableObject {
         socket.disconnect()
     }
     
-    // MARK: - Send Message
-    func send(message: String) {
-        guard isConnected else {
-            print("Cannot send message. Socket is not connected.")
-            DispatchQueue.main.async {
-                self.errorMessage = "Socket is not connected."
-            }
-            return
-        }
-        socket.emit("message", message)
-        print("Sent message: \(message)")
-    }
-    
-    // MARK: - Send Copy Command with Acknowledgment
-    func sendCopy(completion: @escaping (Bool) -> Void) {
+    // MARK: - Send Message Command with Acknowledgment
+    func sendMessage(message:String, completion: @escaping (Bool) -> Void) {
         guard isConnected else {
             print("Cannot send copy. Socket is not connected.")
             DispatchQueue.main.async {
@@ -139,9 +116,10 @@ class SocketIOManager: ObservableObject {
             return
         }
         // Example payload; adjust based on server requirements
-        let payload: [String: Any] = ["command": "copy", "timestamp": Date().timeIntervalSince1970]
+        let payload: [String: Any] = ["command": message, "timestamp": Date().timeIntervalSince1970]
         
-        socket.emitWithAck("copy", payload).timingOut(after: 5) { data in
+        socket.emitWithAck("message", payload).timingOut(after: 5) {
+            data in
             if let ackData = data.first as? String, ackData == "ok" {
                 print("Copy command acknowledged by server.")
                 DispatchQueue.main.async {
@@ -152,36 +130,6 @@ class SocketIOManager: ObservableObject {
                 print("Copy command failed or was not acknowledged.")
                 DispatchQueue.main.async {
                     self.errorMessage = "Copy command failed."
-                }
-                completion(false)
-            }
-        }
-    }
-    
-    // MARK: - Send Delete Command with Acknowledgment
-    func sendDelete(completion: @escaping (Bool) -> Void) {
-        guard isConnected else {
-            print("Cannot send delete. Socket is not connected.")
-            DispatchQueue.main.async {
-                self.errorMessage = "Socket is not connected."
-            }
-            completion(false)
-            return
-        }
-        // Example payload; adjust based on server requirements
-        let payload: [String: Any] = ["command": "delete", "timestamp": Date().timeIntervalSince1970]
-        
-        socket.emitWithAck("delete", payload).timingOut(after: 5) { data in
-            if let ackData = data.first as? String, ackData == "ok" {
-                print("Delete command acknowledged by server.")
-                DispatchQueue.main.async {
-                    self.receivedMessage = "Delete command executed successfully."
-                }
-                completion(true)
-            } else {
-                print("Delete command failed or was not acknowledged.")
-                DispatchQueue.main.async {
-                    self.errorMessage = "Delete command failed."
                 }
                 completion(false)
             }

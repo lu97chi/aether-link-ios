@@ -25,7 +25,7 @@ struct SocketIOActionsCard: View {
             HStack(spacing: 20) {
                 // Copy Button
                 Button(action: {
-                    sendCopy()
+                    sendMessage(message: "Copy")
                 }) {
                     HStack {
                         Image(systemName: "doc.on.doc")
@@ -45,7 +45,7 @@ struct SocketIOActionsCard: View {
                 
                 // Delete Button
                 Button(action: {
-                    sendDelete()
+                    sendMessage(message: "Copy")
                 }) {
                     HStack {
                         Image(systemName: "trash")
@@ -70,26 +70,17 @@ struct SocketIOActionsCard: View {
         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
     }
     
-    // MARK: - Action Methods
-    
-    private func sendCopy() {
+    // MARK: - Action Methods    
+    private func sendMessage(message:String) {
         guard !isOperationInProgress else { return }
         isOperationInProgress = true
-        socketIOManager.sendCopy { success in
+        socketIOManager.sendMessage(message: message) { success in
             isOperationInProgress = false
             if !success {
                 // Handle failure if needed
-            }
-        }
-    }
-    
-    private func sendDelete() {
-        guard !isOperationInProgress else { return }
-        isOperationInProgress = true
-        socketIOManager.sendDelete { success in
-            isOperationInProgress = false
-            if !success {
-                // Handle failure if needed
+                print("Failed to send message.")
+            } else {
+                print("Message sent successfully.")
             }
         }
     }
