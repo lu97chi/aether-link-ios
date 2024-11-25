@@ -9,7 +9,10 @@ class SocketIOManager: ObservableObject {
     // MARK: - Published Properties
     @Published var isConnected: Bool = false
     @Published var receivedMessage: String? = nil
+    @Published var progress: Int = 0
     @Published var errorMessage: String? = nil
+    @Published var operationType: String? = nil
+    @Published var isOperationInProgress: Bool = false
     
     // MARK: - Private Properties
     private var manager: SocketManager
@@ -17,7 +20,7 @@ class SocketIOManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.100.100:1337")!
+    private let serverURL = URL(string: "http://192.168.1.109:3000")!
     
     // MARK: - Initializer
     init() {
@@ -64,22 +67,33 @@ class SocketIOManager: ObservableObject {
         // Handle custom event "message"
         socket.on("message") { [weak self] data, ack in
             if let message = data.first as? String {
-                print("Received message: \(message)")
-                DispatchQueue.main.async {
-                    self?.receivedMessage = message
-                }
+                self?.receivedMessage = message
             }
         }
         
         // Handle custom event "message"
         socket.on("status") { [weak self] data, ack in
-            if let message = data.first as? String {
-                print("Received message: \(message)")
+            if let firstData = data.first as? [String: Any], // Cast `data.first` to a dictionary
+               let progress = firstData["progress"] as? Int { // Safely extract `progress`
                 DispatchQueue.main.async {
-                    self?.receivedMessage = message
+                    self?.progress = progress
                 }
             }
         }
+        
+        // Handle custom event "notification"
+        socket.on("notification") { [weak self] data, ack in
+            if let firstData = data.first as? [String: Any], // Cast `data.first` to a dictionary
+               let notificationStatus = firstData["status"] as? String { // Safely extract `notification`
+                if notificationStatus == "completed" {
+                    DispatchQueue.main.async {
+                        self?.isOperationInProgress = false;
+                    }
+                }
+                
+            }
+        }
+
         
         // Listen to all events for debugging
         socket.onAny { event in
@@ -118,12 +132,13 @@ class SocketIOManager: ObservableObject {
         // Example payload; adjust based on server requirements
         let payload: [String: Any] = ["command": message, "timestamp": Date().timeIntervalSince1970]
         
+        
         socket.emitWithAck("message", payload).timingOut(after: 5) {
             data in
             if let ackData = data.first as? String, ackData == "ok" {
                 print("Copy command acknowledged by server.")
                 DispatchQueue.main.async {
-                    self.receivedMessage = "Copy command executed successfully."
+                    self.operationType = message
                 }
                 completion(true)
             } else {
@@ -132,6 +147,35 @@ class SocketIOManager: ObservableObject {
                     self.errorMessage = "Copy command failed."
                 }
                 completion(false)
+            }
+        }
+    }
+    
+    // MARK: - Send Cancel Command with Acknowledgment
+    func sendCancel() {
+        guard isConnected else {
+            print("Cannot Abort. Socket is not connected.")
+            DispatchQueue.main.async {
+                self.errorMessage = "Socket is not connected."
+            }
+            return
+        }
+        // Example payload; adjust based on server requirements
+        let payload: [String: Any] = ["command": "cancel", "timestamp": Date().timeIntervalSince1970]
+        
+        
+        socket.emitWithAck("abort", payload).timingOut(after: 5) {
+            data in
+            if let ackData = data.first as? String, ackData == "ok" {
+                print("Abort command aknowledged by server.")
+                self.operationType = nil
+                self.progress = 0
+                self.isOperationInProgress = false
+            } else {
+                print("Abort failed or was not acknowledged.")
+                DispatchQueue.main.async {
+                    self.errorMessage = "Abort command failed."
+                }
             }
         }
     }
