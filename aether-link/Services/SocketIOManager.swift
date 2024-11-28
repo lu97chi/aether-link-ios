@@ -13,6 +13,11 @@ class SocketIOManager: ObservableObject {
     @Published var errorMessage: String? = nil
     @Published var operationType: String? = nil
     @Published var isOperationInProgress: Bool = false
+    @Published var totalFiles: Int = 12
+    @Published var currentFileName: String = "Test"
+    @Published var filesProcessed: Int = 4
+    @Published var startTime: Date = Date()
+    
     
     // MARK: - Private Properties
     private var manager: SocketManager
@@ -20,7 +25,7 @@ class SocketIOManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.1.109:3000")!
+    private let serverURL = URL(string: "http://192.168.100.120:3000")!
     
     // MARK: - Initializer
     init() {
@@ -82,12 +87,14 @@ class SocketIOManager: ObservableObject {
         }
         
         // Handle custom event "notification"
-        socket.on("notification") { [weak self] data, ack in
+        socket.on("confirm") { [weak self] data, ack in
             if let firstData = data.first as? [String: Any], // Cast `data.first` to a dictionary
-               let notificationStatus = firstData["status"] as? String { // Safely extract `notification`
-                if notificationStatus == "completed" {
+               let isCompleted = firstData["completed"] as? Bool { // Safely extract `notification`
+                if isCompleted == true {
                     DispatchQueue.main.async {
                         self?.isOperationInProgress = false;
+                        self?.progress = 0;
+                        self?.operationType = nil;
                     }
                 }
                 
@@ -118,7 +125,7 @@ class SocketIOManager: ObservableObject {
         }
         socket.disconnect()
     }
-    
+        
     // MARK: - Send Message Command with Acknowledgment
     func sendMessage(message:String, completion: @escaping (Bool) -> Void) {
         guard isConnected else {

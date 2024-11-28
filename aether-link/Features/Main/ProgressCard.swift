@@ -1,137 +1,214 @@
-// ProgressCard.swift
-
 import SwiftUI
 
-// MARK: - CircularProgressBar View
-struct CircularProgressBar: View {
-    var lineWidth: CGFloat = 10
-    var gradientColors: [Color] = [Color.progressGradientStart, Color.progressGradientEnd]
-    @Binding var progress: Int
-    var abortOperation: () -> Void
-    
-    var body: some View {
-        ZStack {
-            // Background Circle
-            Circle()
-                .stroke(
-                    Color.gray.opacity(0.3),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                .frame(width: 80, height: 80)
-            
-            // Progress Circle
-            Circle()
-                .trim(from: 0.0, to: CGFloat(min(Double(progress), 1.0)))
-                .stroke(
-                    LinearGradient(
-                        gradient: Gradient(colors: gradientColors),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
-                )
-                .rotationEffect(Angle(degrees: -90))
-                .animation(.easeInOut(duration: 0.5), value: progress)
-                .frame(width: 80, height: 80)
-            
-            // Percentage Text
-            Text("\(Int(progress))%")
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-        }
-    }
-}
-
-// MARK: - ProgressCard View
 struct ProgressCard: View {
     @Binding var progress: Int
     @Binding var operationType: String?
+    @Binding var totalFiles: Int
+    @Binding var filesProcessed: Int
+    @Binding var currentFileName: String
+    @Binding var startTime: Date
     var abortOperation: () -> Void
-    
+
+    // State variables for time calculations
+    @State private var elapsedTime: TimeInterval = 0
+    @State private var estimatedRemainingTime: TimeInterval = 0
+    @State private var timer: Timer?
+
+    @State private var showConfetti = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header with Icon and Operation Type
-            HStack(spacing: 15) {
-                Image(systemName: operationType == nil ? "gearshape.fill" : operationType == "Copy" ? "doc.on.doc.fill" : "trash.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(operationType == nil ? .gray : operationType == "Copy" ? .blue : .red)
-                    .shadow(radius: 2)
-                
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(operationType ?? "Operation")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text("in Progress")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
+        ZStack {
+            if showConfetti {
+                ConfettiView()
+                    .ignoresSafeArea()
             }
-            
-            // Circular Progress Indicator
-            CircularProgressBar(progress: $progress, abortOperation: abortOperation)
-                .frame(width: 100, height: 100)
-                .padding(.top, 10)
-                .accessibilityElement(children: .ignore)
-                .accessibility(label: Text("\(Int(progress)) percent completed"))
-            
-            // Progress Description
-            Text("\(Int(progress))% Completed")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.top, 5)
-            
-            // Optional: Cancel Button (if applicable)
-            if progress < 100 {
-                Button(action: {
-                    // Define cancel action
-                    cancelOperation(abortOperation: abortOperation)
-                }) {
-                    HStack {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.headline)
-                        Text("Cancel")
-                            .fontWeight(.semibold)
+
+            VStack(alignment: .center, spacing: 25) {
+                // Header with Icon and Operation Type
+                HStack(spacing: 15) {
+                    Image(systemName: operationIconName())
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .foregroundColor(operationIconColor())
+                        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 2)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(operationType ?? "Operation")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(Color("textPrimary"))
+
+                        Text(progress < 100 ? "In Progress" : "Completed")
+                            .font(.subheadline)
+                            .foregroundColor(Color("textSecondary"))
                     }
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.red)
-                    .cornerRadius(10)
-                    .shadow(color: Color.red.opacity(0.3), radius: 5, x: 0, y: 2)
+                    Spacer()
                 }
-                .accessibility(label: Text("Cancel Operation"))
-                .transition(.opacity)
-                .animation(.easeInOut, value: progress)
+
+                // Circular Progress Indicator with percentage inside
+                ZStack {
+                    CircularProgressBar(progress: $progress, operationType: $operationType)
+                        .frame(width: 160, height: 160)
+                }
+                .padding(.top, 10)
+
+                // Progress Details Card
+                VStack(spacing: 15) {
+                    ProgressDetailRow(label: "Files Processed", value: "\(filesProcessed) / \(totalFiles)", systemImage: "doc.on.doc")
+                    ProgressDetailRow(label: "Current File", value: currentFileName, systemImage: "doc.text")
+                    ProgressDetailRow(label: "Elapsed Time", value: timeString(from: elapsedTime), systemImage: "clock")
+                    ProgressDetailRow(label: "Remaining Time", value: timeString(from: estimatedRemainingTime), systemImage: "hourglass.bottomhalf.fill")
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 15)
+                        .fill(Color("softBackground"))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15)
+                        .stroke(Color("border"), lineWidth: 1)
+                )
+                .padding(.horizontal)
+
+                // Cancel Button
+                if progress < 100 {
+                    Button(action: {
+                        cancelOperation()
+                    }) {
+                        HStack {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.headline)
+                            Text("Cancel")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(Color("background")) // White text over colored background
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color("error")) // Solid red background for cancel button
+                        .cornerRadius(12)
+                        .shadow(color: Color("error").opacity(0.3), radius: 5, x: 0, y: 2)
+                    }
+                    .accessibility(label: Text("Cancel Operation"))
+                    .scaleEffect(1.0)
+                    .animation(.spring(), value: progress)
+                }
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 25)
+                    .fill(Color("surface"))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 25)
+                    .stroke(Color("border"), lineWidth: 1)
+            )
+            .padding(.horizontal)
+            .onAppear {
+                startTimer()
+            }
+            .onDisappear {
+                stopTimer()
+            }
+            .onChange(of: progress) { newValue in
+                if newValue >= 100 {
+                    showConfetti = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        showConfetti = false
+                    }
+                    stopTimer()
+                }
+                updateEstimatedTime()
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    // MARK: - Helper Views
+    struct ProgressDetailRow: View {
+        var label: String
+        var value: String
+        var systemImage: String
+
+        var body: some View {
+            HStack {
+                Image(systemName: systemImage)
+                    .foregroundColor(Color("primary"))
+                    .frame(width: 20)
+                Text(label)
+                    .font(.body)
+                    .foregroundColor(Color("textSecondary"))
+                Spacer()
+                Text(value)
+                    .font(.body)
+                    .foregroundColor(Color("textPrimary"))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.cardBackgroundLight, Color.cardBackgroundDark]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
-        )
-        .cornerRadius(20)
-        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
-        .animation(.easeInOut, value: progress)
-        .accessibilityElement(children: .combine)
     }
-    
+
+    // MARK: - Helper Methods
+    private func operationIconName() -> String {
+        switch operationType {
+        case "Copy":
+            return "doc.on.doc.fill"
+        case "Delete":
+            return "trash.fill"
+        default:
+            return "gearshape.fill"
+        }
+    }
+
+    private func operationIconColor() -> Color {
+        switch operationType {
+        case "Copy":
+            return Color("primary")
+        case "Delete":
+            return Color("error")
+        default:
+            return Color("textSecondary")
+        }
+    }
+
+    private func timeString(from timeInterval: TimeInterval) -> String {
+        let ti = Int(timeInterval)
+        let seconds = ti % 60
+        let minutes = (ti / 60) % 60
+        let hours = (ti / 3600)
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    // MARK: - Timer Methods
+    private func startTimer() {
+        elapsedTime = Date().timeIntervalSince(startTime)
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            elapsedTime = Date().timeIntervalSince(startTime)
+            updateEstimatedTime()
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func updateEstimatedTime() {
+        guard progress > 0 else {
+            estimatedRemainingTime = 0
+            return
+        }
+        let totalEstimatedTime = elapsedTime / Double(progress) * 100
+        estimatedRemainingTime = totalEstimatedTime - elapsedTime
+    }
+
     // MARK: - Action Methods
-    private func cancelOperation(abortOperation: @escaping () -> Void) {
-        // Implement cancellation logic here
+    private func cancelOperation() {
         print("Operation cancelled.")
         abortOperation()
-        // Optionally, emit a cancel event to the server or reset progress
     }
 }

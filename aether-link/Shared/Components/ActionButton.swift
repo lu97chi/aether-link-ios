@@ -1,49 +1,71 @@
-//
-//  ActionButton.swift
-//  aether-link
-//
-//  Created by Luis Roberto Hernandez Robles on 18/11/24.
-//
-
 import SwiftUI
+
+enum ActionButtonStyle {
+    case primary
+    case secondary
+    case danger
+}
 
 // MARK: - ActionButton View
 struct ActionButton: View {
     var title: String
     var icon: String
-    var backgroundColor: Color
+    var style: ActionButtonStyle
     var action: () -> Void
     var isEnabled: Bool
-    
+
     var body: some View {
-        Button(action: {
+        // Determine colors based on the button style
+        let gradientColors: [Color]
+        let textColor: Color = Color("background") // Use white text over colored backgrounds
+        let disabledBackground = Color("disabled")
+        let disabledTextColor = Color("textSecondary")
+
+        switch style {
+        case .primary:
+            gradientColors = [Color("primary"), Color("secondaryAccent")]
+        case .secondary:
+            gradientColors = [Color("secondaryAccent"), Color("primary")]
+        case .danger:
+            // For 'danger', we can use 'error' color
+            gradientColors = [Color("error"), Color("error")]
+        }
+
+        return Button(action: {
             // Haptic Feedback
             let generator = UIImpactFeedbackGenerator(style: .medium)
             generator.impactOccurred()
             action()
         }) {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.title2)
                 Text(title)
                     .fontWeight(.semibold)
+                    .font(.headline)
             }
-            .foregroundColor(.white)
+            .foregroundColor(isEnabled ? textColor : disabledTextColor)
             .padding()
             .frame(maxWidth: .infinity)
             .background(
-                LinearGradient(
-                    gradient: Gradient(colors: isEnabled ? [backgroundColor.opacity(0.8), backgroundColor] : [Color.gray.opacity(0.6), Color.gray.opacity(0.4)]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                Group {
+                    if isEnabled {
+                        LinearGradient(
+                            gradient: Gradient(colors: gradientColors),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    } else {
+                        disabledBackground
+                    }
+                }
             )
-            .cornerRadius(12)
-            .shadow(color: backgroundColor.opacity(0.3), radius: 5, x: 0, y: 2)
+            .cornerRadius(15)
+            .shadow(color: isEnabled ? Color.black.opacity(0.2) : Color.clear, radius: 5, x: 0, y: 3)
         }
-        .scaleEffect(isEnabled ? 1.0 : 0.95)
-        .animation(.spring(), value: isEnabled)
-        .accessibility(label: Text(title))
         .disabled(!isEnabled)
+        .scaleEffect(isEnabled ? 1.0 : 0.98)
+        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isEnabled)
+        .accessibility(label: Text(title))
     }
 }

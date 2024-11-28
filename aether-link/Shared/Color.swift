@@ -31,4 +31,45 @@ extension Color {
     // MARK: Progress Indicator Colors
     static let progressGradientStart = Color.purple.opacity(0.7)
     static let progressGradientEnd = Color.pink.opacity(0.7)
+    
+    // MARK: Color
+    var components: (red: Double, green: Double, blue: Double, opacity: Double) {
+        #if canImport(UIKit)
+        typealias NativeColor = UIColor
+        #elseif canImport(AppKit)
+        typealias NativeColor = NSColor
+        #endif
+
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var opacity: CGFloat = 0
+
+        // Use platform-specific conversion
+        let nativeColor = NativeColor(self)
+        
+        // Extract components
+        if nativeColor.getRed(&red, green: &green, blue: &blue, alpha: &opacity) {
+            return (Double(red), Double(green), Double(blue), Double(opacity))
+        }
+
+        // Fallback for unsupported colors
+        return (0, 0, 0, 0)
+    }
+
+    
+    // MARK: - Custom Gradient
+    static func dynamicGradient(for progress: Int) -> [Color] {
+        let percentage = Double(progress) / 100.0
+        let startColor = Color.red
+        let endColor = Color.green
+        let currentColor = Color(
+            red: startColor.components.red + percentage * (endColor.components.red - startColor.components.red),
+            green: startColor.components.green + percentage * (endColor.components.green - startColor.components.green),
+            blue: startColor.components.blue + percentage * (endColor.components.blue - startColor.components.blue)
+        )
+        return [currentColor.opacity(0.8), currentColor]
+    }
+    
+
 }
