@@ -7,22 +7,16 @@ struct ProgressCard: View {
     @Binding var filesProcessed: Int
     @Binding var currentFileName: String
     @Binding var startTime: Date
+    @Binding var messages: [String]
     var abortOperation: () -> Void
 
-    // State variables for time calculations
     @State private var elapsedTime: TimeInterval = 0
     @State private var estimatedRemainingTime: TimeInterval = 0
     @State private var timer: Timer?
-
-    @State private var showConfetti = false
+    @State private var currentMessage: String = ""
 
     var body: some View {
         ZStack {
-            if showConfetti {
-                ConfettiView()
-                    .ignoresSafeArea()
-            }
-
             VStack(alignment: .center, spacing: 25) {
                 // Header with Icon and Operation Type
                 HStack(spacing: 15) {
@@ -37,21 +31,37 @@ struct ProgressCard: View {
                         Text(operationType ?? "Operation")
                             .font(.title2)
                             .fontWeight(.bold)
-                            .foregroundColor(Color("textPrimary"))
+                            .foregroundColor(Color("Text"))
 
                         Text(progress < 100 ? "In Progress" : "Completed")
                             .font(.subheadline)
-                            .foregroundColor(Color("textSecondary"))
+                            .foregroundColor(Color("SubtleText"))
                     }
                     Spacer()
                 }
 
-                // Circular Progress Indicator with percentage inside
+                // Circular Progress Indicator
                 ZStack {
                     CircularProgressBar(progress: $progress, operationType: $operationType)
                         .frame(width: 160, height: 160)
                 }
                 .padding(.top, 10)
+
+                // Typewriter Text for Messages
+                if !messages.isEmpty {
+                    TypewriterText(fullText: currentMessage)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal)
+                        .onAppear {
+                            updateMessage()
+                        }
+                        .onChange(of: filesProcessed) { _ in
+                            updateMessage()
+                        }
+                        .onChange(of: messages) { _ in
+                            updateMessage()
+                        }
+                }
 
                 // Progress Details Card
                 VStack(spacing: 15) {
@@ -63,11 +73,11 @@ struct ProgressCard: View {
                 .padding()
                 .background(
                     RoundedRectangle(cornerRadius: 15)
-                        .fill(Color("softBackground"))
+                        .fill(Color("Background"))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 15)
-                        .stroke(Color("border"), lineWidth: 1)
+                        .stroke(Color("Outline"), lineWidth: 1)
                 )
                 .padding(.horizontal)
 
@@ -82,12 +92,12 @@ struct ProgressCard: View {
                             Text("Cancel")
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color("background")) // White text over colored background
+                        .foregroundColor(Color("Background"))
                         .padding()
                         .frame(maxWidth: .infinity)
-                        .background(Color("error")) // Solid red background for cancel button
+                        .background(Color("DangerRed"))
                         .cornerRadius(12)
-                        .shadow(color: Color("error").opacity(0.3), radius: 5, x: 0, y: 2)
+                        .shadow(color: Color("DangerRed").opacity(0.3), radius: 5, x: 0, y: 2)
                     }
                     .accessibility(label: Text("Cancel Operation"))
                     .scaleEffect(1.0)
@@ -97,11 +107,11 @@ struct ProgressCard: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 25)
-                    .fill(Color("surface"))
+                    .fill(Color("Surface"))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 25)
-                    .stroke(Color("border"), lineWidth: 1)
+                    .stroke(Color("Outline"), lineWidth: 1)
             )
             .padding(.horizontal)
             .onAppear {
@@ -110,41 +120,23 @@ struct ProgressCard: View {
             .onDisappear {
                 stopTimer()
             }
-            .onChange(of: progress) { newValue in
-                if newValue >= 100 {
-                    showConfetti = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        showConfetti = false
-                    }
-                    stopTimer()
-                }
+            .onChange(of: progress) { _ in
                 updateEstimatedTime()
             }
-            .accessibilityElement(children: .combine)
         }
     }
 
-    // MARK: - Helper Views
-    struct ProgressDetailRow: View {
-        var label: String
-        var value: String
-        var systemImage: String
+    // MARK: - Update Messages
+    private func updateMessage() {
+        guard !messages.isEmpty else {
+            currentMessage = ""
+            return
+        }
 
-        var body: some View {
-            HStack {
-                Image(systemName: systemImage)
-                    .foregroundColor(Color("primary"))
-                    .frame(width: 20)
-                Text(label)
-                    .font(.body)
-                    .foregroundColor(Color("textSecondary"))
-                Spacer()
-                Text(value)
-                    .font(.body)
-                    .foregroundColor(Color("textPrimary"))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+        if filesProcessed > 0 && filesProcessed <= messages.count {
+            currentMessage = messages[filesProcessed - 1]
+        } else {
+            currentMessage = messages.first ?? ""
         }
     }
 
@@ -163,11 +155,11 @@ struct ProgressCard: View {
     private func operationIconColor() -> Color {
         switch operationType {
         case "Copy":
-            return Color("primary")
+            return Color("HighlightCyan")
         case "Delete":
-            return Color("error")
+            return Color.red
         default:
-            return Color("textSecondary")
+            return Color("SubtleText")
         }
     }
 
@@ -206,9 +198,7 @@ struct ProgressCard: View {
         estimatedRemainingTime = totalEstimatedTime - elapsedTime
     }
 
-    // MARK: - Action Methods
     private func cancelOperation() {
-        print("Operation cancelled.")
         abortOperation()
     }
 }

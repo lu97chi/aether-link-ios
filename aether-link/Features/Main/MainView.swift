@@ -20,6 +20,6 @@ struct MainView: View {
                 }
                 .environmentObject(bluetoothManager)
         }
-        .accentColor(Color("primary")) // Customize the tab highlight color using your palette
+        .accentColor(Color("PrimaryBlue")) // Customize the tab highlight color using your palette
     }
 }

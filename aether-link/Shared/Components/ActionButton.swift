@@ -6,7 +6,6 @@ enum ActionButtonStyle {
     case danger
 }
 
-// MARK: - ActionButton View
 struct ActionButton: View {
     var title: String
     var icon: String
@@ -15,37 +14,36 @@ struct ActionButton: View {
     var isEnabled: Bool
 
     var body: some View {
-        // Determine colors based on the button style
+        // Determine button appearance
         let gradientColors: [Color]
-        let textColor: Color = Color("background") // Use white text over colored backgrounds
-        let disabledBackground = Color("disabled")
-        let disabledTextColor = Color("textSecondary")
+        let textColor: Color = isEnabled ? Color.white : Color("SubtleText")
+        let disabledBackground = Color("Outline")
 
         switch style {
         case .primary:
-            gradientColors = [Color("primary"), Color("secondaryAccent")]
+            gradientColors = [Color("PrimaryBlue"), Color("SecondaryBlue")]
         case .secondary:
-            gradientColors = [Color("secondaryAccent"), Color("primary")]
+            gradientColors = [Color("SecondaryBlue"), Color("PrimaryBlue")]
         case .danger:
-            // For 'danger', we can use 'error' color
-            gradientColors = [Color("error"), Color("error")]
+            gradientColors = [Color.red, Color.red.opacity(0.8)] // Adjusted for a darker red
         }
 
         return Button(action: {
-            // Haptic Feedback
             let generator = UIImpactFeedbackGenerator(style: .medium)
             generator.impactOccurred()
             action()
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.title2)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(textColor)
+
                 Text(title)
-                    .fontWeight(.semibold)
-                    .font(.headline)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(textColor)
             }
-            .foregroundColor(isEnabled ? textColor : disabledTextColor)
-            .padding()
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity)
             .background(
                 Group {
@@ -60,8 +58,13 @@ struct ActionButton: View {
                     }
                 }
             )
-            .cornerRadius(15)
-            .shadow(color: isEnabled ? Color.black.opacity(0.2) : Color.clear, radius: 5, x: 0, y: 3)
+            .cornerRadius(12)
+            .shadow(
+                color: isEnabled ? Color.black.opacity(0.15) : Color.clear,
+                radius: 4,
+                x: 0,
+                y: 3
+            )
         }
         .disabled(!isEnabled)
         .scaleEffect(isEnabled ? 1.0 : 0.98)

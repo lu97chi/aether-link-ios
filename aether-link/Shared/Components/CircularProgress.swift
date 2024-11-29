@@ -6,21 +6,19 @@ struct CircularProgressBar: View {
     @Binding var progress: Int // Progress from 0 to 100
     @Binding var operationType: String?
 
-    // State variables for animating progress and glow effect
-    @State private var animatedProgress: Double = 0.0
-    @State private var glowOpacity: Double = 0.0
+    // State variables for animating progress
+    @State private var animatedProgress: CGFloat = 0.0
 
-    // Determine gradient colors based on operation type
-    var gradientColors: [Color] {
+    // Gradient colors based on operation type
+    private var gradientColors: [Color] {
         switch operationType {
         case "Copy":
-            return [ Color("success").opacity(0.2), Color("success")]
+            return [Color("HighlightCyan"), Color("HighlightCyan").opacity(0.8)]
         case "Delete":
-            return [Color("error").opacity(0.2), Color("error")]
+            return [Color.red, Color.red.opacity(0.8)]
         default:
-            return [Color("primary"), Color("secondaryAccent")]
+            return [Color("PrimaryBlue"), Color("SecondaryBlue")]
         }
-        
     }
 
     var body: some View {
@@ -28,14 +26,14 @@ struct CircularProgressBar: View {
             // Background Circle
             Circle()
                 .stroke(
-                    Color("border").opacity(0.3),
+                    Color("Outline").opacity(0.3),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .frame(width: 180, height: 180)
 
-            // Progress Circle with Gradient
+            // Foreground Progress Circle
             Circle()
-                .trim(from: 0.0, to: CGFloat(min(animatedProgress, 1.0)))
+                .trim(from: 0.0, to: animatedProgress)
                 .stroke(
                     AngularGradient(
                         gradient: Gradient(colors: gradientColors),
@@ -45,41 +43,31 @@ struct CircularProgressBar: View {
                 )
                 .rotationEffect(Angle(degrees: -90))
                 .frame(width: 180, height: 180)
-                .overlay(
-                    // Glow Effect
-                    Circle()
-                        .trim(from: 0.0, to: CGFloat(min(animatedProgress, 1.0)))
-                        .stroke(
-                            gradientColors.last?.opacity(0.7) ?? Color("secondaryAccent").opacity(0.7),
-                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                        )
-                        .blur(radius: 10)
-                        .opacity(glowOpacity)
-                        .animation(Animation.easeInOut(duration: 1).repeatForever(autoreverses: true), value: glowOpacity)
-                        .onAppear {
-                            glowOpacity = 0.7
-                        }
-                )
                 .animation(.easeInOut(duration: 0.5), value: animatedProgress)
 
             // Percentage Text
             VStack {
                 Text("\(progress)%")
                     .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundColor(Color("textPrimary"))
-                Text("Completed")
+                    .foregroundColor(Color("Text"))
+                Text(progress < 100 ? "In Progress" : "Completed")
                     .font(.headline)
-                    .foregroundColor(Color("textSecondary"))
+                    .foregroundColor(Color("SubtleText"))
             }
         }
         .onAppear {
-            // Initialize the animated progress
-            animatedProgress = Double(progress) / 100.0
+            updateProgress()
         }
-        .onChange(of: progress) { newValue in
-            withAnimation(.easeInOut(duration: 0.5)) {
-                animatedProgress = Double(newValue) / 100.0
-            }
+        .onChange(of: progress) { _ in
+            updateProgress()
+        }
+    }
+
+    // MARK: - Helper Methods
+    private func updateProgress() {
+        // Smoothly animate progress updates
+        withAnimation(.easeInOut(duration: 0.5)) {
+            animatedProgress = CGFloat(progress) / 100
         }
     }
 }

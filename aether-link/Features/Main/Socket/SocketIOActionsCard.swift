@@ -11,9 +11,9 @@ struct SocketIOActionsCard: View {
             Text("Actions")
                 .font(.title2)
                 .fontWeight(.bold)
-                .foregroundColor(Color("textPrimary"))
+                .foregroundColor(Color("Text"))
                 .padding(.bottom, 10)
-            
+
             // Buttons
             HStack(spacing: 20) {
                 // Copy Button
@@ -22,18 +22,18 @@ struct SocketIOActionsCard: View {
                     icon: "doc.on.doc.fill",
                     style: .primary,
                     action: {
-                        sendMessage(message: "Copy")
+                        sendMessage(message: "copy")
                     },
                     isEnabled: socketIOManager.isConnected && !socketIOManager.isOperationInProgress
                 )
-                                
+
                 // Delete Button
                 ActionButton(
                     title: "Delete",
                     icon: "trash.fill",
                     style: .danger,
                     action: {
-                        sendMessage(message: "Delete")
+                        sendMessage(message: "delete")
                     },
                     isEnabled: socketIOManager.isConnected && !socketIOManager.isOperationInProgress
                 )
@@ -43,24 +43,23 @@ struct SocketIOActionsCard: View {
         .padding(25)
         .background(
             RoundedRectangle(cornerRadius: 25)
-                .fill(Color("surface"))
+                .fill(Color("Surface"))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 25)
-                .stroke(Color("border"), lineWidth: 1)
+                .stroke(Color("Outline"), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
         .padding(.horizontal)
         .animation(.easeInOut(duration: 0.5), value: socketIOManager.isOperationInProgress)
     }
-    
+
     // MARK: - Action Methods
     private func sendMessage(message: String) {
         guard !socketIOManager.isOperationInProgress else { return }
         socketIOManager.isOperationInProgress = true
         socketIOManager.sendMessage(message: message) { success in
             if !success {
-                // Handle failure if needed
                 print("Failed to send message.")
             } else {
                 print("Message sent successfully.")

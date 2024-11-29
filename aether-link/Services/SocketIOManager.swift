@@ -1,8 +1,12 @@
 // SocketIOManager.swift
+// Prod http://192.168.100.100:1337
+// Dev http://192.168.1.109:3000
 
 import Foundation
 import SocketIO
 import Combine
+import ActivityKit
+
 
 /// A class that manages Socket.IO connections.
 class SocketIOManager: ObservableObject {
@@ -19,13 +23,15 @@ class SocketIOManager: ObservableObject {
     @Published var startTime: Date = Date()
     
     
+    
     // MARK: - Private Properties
     private var manager: SocketManager
     private var socket: SocketIOClient
     private var cancellables = Set<AnyCancellable>()
+    private var activity: Activity<FileTransferActivityAttributes>?
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.100.120:3000")!
+    private let serverURL = URL(string: "http://192.168.100.100:1337")!
     
     // MARK: - Initializer
     init() {
@@ -187,8 +193,10 @@ class SocketIOManager: ObservableObject {
         }
     }
     
+    
     // MARK: - Deinitializer
     deinit {
         socket.disconnect()
     }
 }
+
