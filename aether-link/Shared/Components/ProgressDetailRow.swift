@@ -1,13 +1,7 @@
-//
-//  ProgressDetailRow.swift
-//  aether-link
-//
-//  Created by Luis Roberto Hernandez Robles on 28/11/24.
-//
+// ProgressDetailRow.swift
 
 import SwiftUI
 
-// MARK: - Helper Views
 struct ProgressDetailRow: View {
     var label: String
     var value: String

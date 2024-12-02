@@ -1,20 +1,19 @@
+// CircularProgressBar.swift
+
 import SwiftUI
 
-// MARK: - CircularProgressBar View
 struct CircularProgressBar: View {
     var lineWidth: CGFloat = 15
-    @Binding var progress: Int // Progress from 0 to 100
-    @Binding var operationType: String?
+    @Binding var progress: Double // Overall progress from 0 to 100
+    @Binding var operationType: String? // To adjust gradient based on operation type
 
-    // State variables for animating progress
     @State private var animatedProgress: CGFloat = 0.0
 
-    // Gradient colors based on operation type
     private var gradientColors: [Color] {
-        switch operationType {
-        case "Copy":
+        switch operationType?.lowercased() {
+        case "copy":
             return [Color("HighlightCyan"), Color("HighlightCyan").opacity(0.8)]
-        case "Delete":
+        case "delete":
             return [Color.red, Color.red.opacity(0.8)]
         default:
             return [Color("PrimaryBlue"), Color("SecondaryBlue")]
@@ -47,7 +46,7 @@ struct CircularProgressBar: View {
 
             // Percentage Text
             VStack {
-                Text("\(progress)%")
+                Text("\(Int(progress))%")
                     .font(.system(size: 48, weight: .bold, design: .rounded))
                     .foregroundColor(Color("Text"))
                 Text(progress < 100 ? "In Progress" : "Completed")
@@ -63,9 +62,7 @@ struct CircularProgressBar: View {
         }
     }
 
-    // MARK: - Helper Methods
     private func updateProgress() {
-        // Smoothly animate progress updates
         withAnimation(.easeInOut(duration: 0.5)) {
             animatedProgress = CGFloat(progress) / 100
         }

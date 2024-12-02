@@ -1,10 +1,11 @@
+// SocketIOView.swift
+
 import SwiftUI
 
 struct SocketIOView: View {
     @EnvironmentObject var socketIOManager: SocketIOManager
     @State private var showProgressCard: Bool = false
     @State private var messages: [String] = ["Initializing..."]
-
 
     var body: some View {
         ZStack {
@@ -26,7 +27,7 @@ struct SocketIOView: View {
 
                         // ProgressView for initial state
                         if socketIOManager.progress == 0 && socketIOManager.isOperationInProgress {
-                            ProgressView(socketIOManager.receivedMessage ?? "Processing...")
+                            ProgressView(socketIOManager.statusMessage)
                                 .progressViewStyle(CircularProgressViewStyle(tint: Color("PrimaryBlue")))
                                 .padding(.top, 10)
                                 .frame(maxWidth: .infinity, alignment: .center)
@@ -50,12 +51,6 @@ struct SocketIOView: View {
 
                     // ProgressCard
                     ProgressCard(
-                        progress: .constant(socketIOManager.progress),
-                        operationType: .constant(socketIOManager.operationType),
-                        totalFiles: .constant(socketIOManager.totalFiles),
-                        filesProcessed: .constant(socketIOManager.filesProcessed),
-                        currentFileName: .constant(socketIOManager.currentFileName),
-                        startTime: .constant(socketIOManager.startTime),
                         messages: $messages,
                         abortOperation: socketIOManager.sendCancel
                     )
@@ -73,7 +68,13 @@ struct SocketIOView: View {
                 messages = getMessagesByType(operationType: operationType)
             }
         }
+        .onChange(of: socketIOManager.operationType) { newType in
+            messages = getMessagesByType(operationType: newType ?? "default")
+        }
         .onChange(of: socketIOManager.progress) { _ in
+            updateProgressCardVisibility()
+        }
+        .onChange(of: socketIOManager.fileProgress) { _ in
             updateProgressCardVisibility()
         }
         .onChange(of: socketIOManager.isOperationInProgress) { _ in
@@ -84,14 +85,18 @@ struct SocketIOView: View {
     // MARK: - Helper Methods
     private func updateProgressCardVisibility() {
         withAnimation {
-            showProgressCard = socketIOManager.progress > 0 && socketIOManager.isOperationInProgress
+            // Show ProgressCard only when operation is in progress and overall progress > 0
+            showProgressCard = socketIOManager.isOperationInProgress && socketIOManager.progress > 0
+            if showProgressCard && messages.isEmpty {
+                messages = getMessagesByType(operationType: socketIOManager.operationType ?? "default")
+            }
         }
     }
 }
 
 func getMessagesByType(operationType: String) -> [String] {
-    switch operationType {
-    case "Copy":
+    switch operationType.lowercased() {
+    case "copy":
         return [
             "Initializing the copy operation...",
             "Scanning the source directory...",
@@ -106,7 +111,7 @@ func getMessagesByType(operationType: String) -> [String] {
             "Operation completed without errors."
         ]
 
-    case "Delete":
+    case "delete":
         return [
             "Initializing the delete operation...",
             "Scanning for files to delete...",

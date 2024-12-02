@@ -1,23 +1,18 @@
+// ProgressCard.swift
+
 import SwiftUI
 
 struct ProgressCard: View {
-    @Binding var progress: Int
-    @Binding var operationType: String?
-    @Binding var totalFiles: Int
-    @Binding var filesProcessed: Int
-    @Binding var currentFileName: String
-    @Binding var startTime: Date
+    @EnvironmentObject var socketIOManager: SocketIOManager
     @Binding var messages: [String]
     var abortOperation: () -> Void
 
-    @State private var elapsedTime: TimeInterval = 0
-    @State private var estimatedRemainingTime: TimeInterval = 0
-    @State private var timer: Timer?
     @State private var currentMessage: String = ""
+    @State private var showCompletionAlert: Bool = false // State for managing alert visibility
 
     var body: some View {
         ZStack {
-            VStack(alignment: .center, spacing: 25) {
+            VStack(alignment: .leading, spacing: 20) {
                 // Header with Icon and Operation Type
                 HStack(spacing: 15) {
                     Image(systemName: operationIconName())
@@ -28,47 +23,59 @@ struct ProgressCard: View {
                         .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 2)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(operationType ?? "Operation")
+                        Text(socketIOManager.operationType?.capitalized ?? "Unknown Operation")
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(Color("Text"))
 
-                        Text(progress < 100 ? "In Progress" : "Completed")
+                        Text(socketIOManager.progress < 100 ? "In Progress" : "Completed")
                             .font(.subheadline)
                             .foregroundColor(Color("SubtleText"))
                     }
                     Spacer()
                 }
 
-                // Circular Progress Indicator
+                // Overall Circular Progress Indicator
                 ZStack {
-                    CircularProgressBar(progress: $progress, operationType: $operationType)
+                    CircularProgressBar(progress: $socketIOManager.progress, operationType: $socketIOManager.operationType)
                         .frame(width: 160, height: 160)
                 }
-                .padding(.top, 10)
 
-                // Typewriter Text for Messages
-                if !messages.isEmpty {
-                    TypewriterText(fullText: currentMessage)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal)
-                        .onAppear {
-                            updateMessage()
-                        }
-                        .onChange(of: filesProcessed) { _ in
-                            updateMessage()
-                        }
-                        .onChange(of: messages) { _ in
-                            updateMessage()
-                        }
+                // Current File Progress
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Current File")
+                        .font(.headline)
+                        .foregroundColor(Color("Text"))
+
+                    Text(URL(fileURLWithPath: socketIOManager.currentFile).lastPathComponent)
+                        .font(.subheadline)
+                        .foregroundColor(Color("SubtleText"))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    // Individual File Progress
+                    ProgressView(value: socketIOManager.fileProgress, total: 100)
+                        .progressViewStyle(LinearProgressViewStyle(tint: Color("HighlightCyan")))
+                        .accessibility(value: Text("\(Int(socketIOManager.fileProgress)) percent"))
                 }
 
-                // Progress Details Card
+                // Progress Details
                 VStack(spacing: 15) {
-                    ProgressDetailRow(label: "Files Processed", value: "\(filesProcessed) / \(totalFiles)", systemImage: "doc.on.doc")
-                    ProgressDetailRow(label: "Current File", value: currentFileName, systemImage: "doc.text")
-                    ProgressDetailRow(label: "Elapsed Time", value: timeString(from: elapsedTime), systemImage: "clock")
-                    ProgressDetailRow(label: "Remaining Time", value: timeString(from: estimatedRemainingTime), systemImage: "hourglass.bottomhalf.fill")
+                    ProgressDetailRow(
+                        label: "Files Processed",
+                        value: "\(socketIOManager.filesProcessed) of \(socketIOManager.totalFiles)",
+                        systemImage: "doc.on.doc"
+                    )
+                    ProgressDetailRow(
+                        label: "Elapsed Time",
+                        value: formattedTime(Int(socketIOManager.elapsedTime)),
+                        systemImage: "clock"
+                    )
+                    ProgressDetailRow(
+                        label: "Remaining Time",
+                        value: formattedTime(Int(socketIOManager.remainingTime)),
+                        systemImage: "hourglass.bottomhalf.fill"
+                    )
                 }
                 .padding()
                 .background(
@@ -79,10 +86,16 @@ struct ProgressCard: View {
                     RoundedRectangle(cornerRadius: 15)
                         .stroke(Color("Outline"), lineWidth: 1)
                 )
-                .padding(.horizontal)
+
+                // Directories Section
+                DirectoriesSection(
+                    srcDir: socketIOManager.srcDir,
+                    destDir: socketIOManager.destDir
+                )
+                .padding(.top, 10)
 
                 // Cancel Button
-                if progress < 100 {
+                if socketIOManager.isOperationInProgress {
                     Button(action: {
                         cancelOperation()
                     }) {
@@ -100,8 +113,6 @@ struct ProgressCard: View {
                         .shadow(color: Color("DangerRed").opacity(0.3), radius: 5, x: 0, y: 2)
                     }
                     .accessibility(label: Text("Cancel Operation"))
-                    .scaleEffect(1.0)
-                    .animation(.spring(), value: progress)
                 }
             }
             .padding()
@@ -114,38 +125,27 @@ struct ProgressCard: View {
                     .stroke(Color("Outline"), lineWidth: 1)
             )
             .padding(.horizontal)
-            .onAppear {
-                startTimer()
-            }
-            .onDisappear {
-                stopTimer()
-            }
-            .onChange(of: progress) { _ in
-                updateEstimatedTime()
-            }
         }
-    }
-
-    // MARK: - Update Messages
-    private func updateMessage() {
-        guard !messages.isEmpty else {
-            currentMessage = ""
-            return
+        .alert(isPresented: $showCompletionAlert) {
+            Alert(
+                title: Text("Operation Completed"),
+                message: Text("The \(socketIOManager.operationType?.lowercased() ?? "operation") has completed successfully."),
+                dismissButton: .default(Text("OK"))
+            )
         }
-
-        if filesProcessed > 0 && filesProcessed <= messages.count {
-            currentMessage = messages[filesProcessed - 1]
-        } else {
-            currentMessage = messages.first ?? ""
+        .onChange(of: socketIOManager.progress) { progress in
+            if progress >= 100 {
+                showCompletionAlert = true
+            }
         }
     }
 
     // MARK: - Helper Methods
     private func operationIconName() -> String {
-        switch operationType {
-        case "Copy":
+        switch socketIOManager.operationType?.lowercased() {
+        case "copy":
             return "doc.on.doc.fill"
-        case "Delete":
+        case "delete":
             return "trash.fill"
         default:
             return "gearshape.fill"
@@ -153,52 +153,24 @@ struct ProgressCard: View {
     }
 
     private func operationIconColor() -> Color {
-        switch operationType {
-        case "Copy":
+        switch socketIOManager.operationType?.lowercased() {
+        case "copy":
             return Color("HighlightCyan")
-        case "Delete":
+        case "delete":
             return Color.red
         default:
             return Color("SubtleText")
         }
     }
 
-    private func timeString(from timeInterval: TimeInterval) -> String {
-        let ti = Int(timeInterval)
-        let seconds = ti % 60
-        let minutes = (ti / 60) % 60
-        let hours = (ti / 3600)
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%02d:%02d", minutes, seconds)
-        }
-    }
-
-    // MARK: - Timer Methods
-    private func startTimer() {
-        elapsedTime = Date().timeIntervalSince(startTime)
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            elapsedTime = Date().timeIntervalSince(startTime)
-            updateEstimatedTime()
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func updateEstimatedTime() {
-        guard progress > 0 else {
-            estimatedRemainingTime = 0
-            return
-        }
-        let totalEstimatedTime = elapsedTime / Double(progress) * 100
-        estimatedRemainingTime = totalEstimatedTime - elapsedTime
-    }
-
     private func cancelOperation() {
         abortOperation()
+    }
+
+    private func formattedTime(_ time: Int) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = [.hour, .minute, .second]
+        return formatter.string(from: TimeInterval(time)) ?? "--"
     }
 }
