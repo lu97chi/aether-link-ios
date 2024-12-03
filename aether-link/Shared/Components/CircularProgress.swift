@@ -1,13 +1,9 @@
-// CircularProgressBar.swift
-
 import SwiftUI
 
 struct CircularProgressBar: View {
     var lineWidth: CGFloat = 15
-    @Binding var progress: Double // Overall progress from 0 to 100
-    @Binding var operationType: String? // To adjust gradient based on operation type
-
-    @State private var animatedProgress: CGFloat = 0.0
+    var progress: Double // Overall progress from 0 to 100
+    var operationType: String? // To adjust gradient based on operation type
 
     private var gradientColors: [Color] {
         switch operationType?.lowercased() {
@@ -28,11 +24,10 @@ struct CircularProgressBar: View {
                     Color("Outline").opacity(0.3),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
-                .frame(width: 180, height: 180)
 
             // Foreground Progress Circle
             Circle()
-                .trim(from: 0.0, to: animatedProgress)
+                .trim(from: 0.0, to: CGFloat(min(self.progress / 100.0, 1.0)))
                 .stroke(
                     AngularGradient(
                         gradient: Gradient(colors: gradientColors),
@@ -41,8 +36,7 @@ struct CircularProgressBar: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(Angle(degrees: -90))
-                .frame(width: 180, height: 180)
-                .animation(.easeInOut(duration: 0.5), value: animatedProgress)
+                .animation(.easeInOut(duration: 0.5), value: progress)
 
             // Percentage Text
             VStack {
@@ -54,17 +48,6 @@ struct CircularProgressBar: View {
                     .foregroundColor(Color("SubtleText"))
             }
         }
-        .onAppear {
-            updateProgress()
-        }
-        .onChange(of: progress) { _ in
-            updateProgress()
-        }
-    }
-
-    private func updateProgress() {
-        withAnimation(.easeInOut(duration: 0.5)) {
-            animatedProgress = CGFloat(progress) / 100
-        }
+        .aspectRatio(1, contentMode: .fit)
     }
 }

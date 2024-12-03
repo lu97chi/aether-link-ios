@@ -1,18 +1,24 @@
-// ProgressCard.swift
-
 import SwiftUI
 
 struct ProgressCard: View {
     @EnvironmentObject var socketIOManager: SocketIOManager
-    @Binding var messages: [String]
     var abortOperation: () -> Void
 
-    @State private var currentMessage: String = ""
-    @State private var showCompletionAlert: Bool = false // State for managing alert visibility
+    @State private var currentMessageIndex: Int = 0
+    @State private var showCompletionAlert: Bool = false
+
+    // Static messages array declared as a constant
+    private let messages: [String] = [
+        "Starting the operation...",
+        "Performing the required tasks...",
+        "Optimizing the process...",
+        "Finalizing the operation...",
+        "Operation completed successfully!"
+    ]
 
     var body: some View {
         ZStack {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(spacing: 20) {
                 // Header with Icon and Operation Type
                 HStack(spacing: 15) {
                     Image(systemName: operationIconName())
@@ -35,11 +41,15 @@ struct ProgressCard: View {
                     Spacer()
                 }
 
+                // Progress Logs
+                ProgressLogs(messages: messages, currentMessageIndex: currentMessageIndex)
+
                 // Overall Circular Progress Indicator
-                ZStack {
-                    CircularProgressBar(progress: $socketIOManager.progress, operationType: $socketIOManager.operationType)
-                        .frame(width: 160, height: 160)
-                }
+                CircularProgressBar(
+                    progress: socketIOManager.progress,
+                    operationType: socketIOManager.operationType
+                )
+                .frame(width: 160, height: 160)
 
                 // Current File Progress
                 VStack(alignment: .leading, spacing: 10) {
@@ -105,7 +115,7 @@ struct ProgressCard: View {
                             Text("Cancel")
                                 .fontWeight(.semibold)
                         }
-                        .foregroundColor(Color("Background"))
+                        .foregroundColor(Color.white)
                         .padding()
                         .frame(maxWidth: .infinity)
                         .background(Color("DangerRed"))
@@ -133,10 +143,14 @@ struct ProgressCard: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .onAppear {
+            updateCurrentMessageIndex()
+        }
         .onChange(of: socketIOManager.progress) { progress in
             if progress >= 100 {
                 showCompletionAlert = true
             }
+            updateCurrentMessageIndex()
         }
     }
 
@@ -172,5 +186,21 @@ struct ProgressCard: View {
         formatter.unitsStyle = .abbreviated
         formatter.allowedUnits = [.hour, .minute, .second]
         return formatter.string(from: TimeInterval(time)) ?? "--"
+    }
+
+    private func updateCurrentMessageIndex() {
+        guard !messages.isEmpty else {
+            currentMessageIndex = 0
+            return
+        }
+        let totalMessages = messages.count
+        let progress = socketIOManager.progress
+        let calculatedIndex = Int((progress / 100.0) * Double(totalMessages))
+        let newIndex = min(calculatedIndex, totalMessages - 1)
+        if newIndex != currentMessageIndex {
+            withAnimation(.easeInOut) {
+                currentMessageIndex = newIndex
+            }
+        }
     }
 }

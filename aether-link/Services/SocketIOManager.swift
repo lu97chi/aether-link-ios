@@ -41,7 +41,7 @@ class SocketIOManager: ObservableObject {
     private var activity: Activity<FileTransferActivityAttributes>?
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.1.109:1338")!
+    private let serverURL = URL(string: "http://192.168.100.100:1338")!
     
     // MARK: - Initializer
     init() {
