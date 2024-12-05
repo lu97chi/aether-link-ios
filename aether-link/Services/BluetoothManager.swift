@@ -85,7 +85,7 @@ class BluetoothManager: NSObject, ObservableObject {
     // MARK: - Data Transmission Methods
     
     /// Sends a JSON-formatted message to the connected peripheral.
-    /// - Parameter action: The action to include in the message (e.g., "copy", "delete").
+    /// - Parameter action: The action to include in the message (e.g., "copy", "erase").
     func sendMessage(action: String) {
         guard let peripheral = connectedPeripheral, let characteristic = writeCharacteristic else {
             print("Peripheral or characteristic not available.")

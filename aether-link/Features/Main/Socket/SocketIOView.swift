@@ -50,13 +50,15 @@ struct SocketIOView: View {
                     ProgressCard(
                         abortOperation: socketIOManager.sendCancel
                     )
-                    .padding()
-                    .scaleEffect(showProgressCard ? 1.0 : 0.9)
-                    .opacity(showProgressCard ? 1 : 0)
+                    .environmentObject(socketIOManager)
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                     .animation(.spring(response: 0.8, dampingFraction: 0.8), value: showProgressCard)
                 }
+                .edgesIgnoringSafeArea(.all)
             }
+        }
+        .onAppear {
+            updateProgressCardVisibility()
         }
         .onChange(of: socketIOManager.progress) { _ in
             updateProgressCardVisibility()
@@ -72,8 +74,8 @@ struct SocketIOView: View {
     // MARK: - Helper Methods
     private func updateProgressCardVisibility() {
         withAnimation {
-            // Show ProgressCard only when operation is in progress and overall progress > 0
-            showProgressCard = socketIOManager.isOperationInProgress && socketIOManager.progress > 0
+            // Show ProgressCard when operation is in progress
+            showProgressCard = socketIOManager.isOperationInProgress
         }
     }
 }

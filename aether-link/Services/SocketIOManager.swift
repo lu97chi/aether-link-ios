@@ -13,11 +13,13 @@ enum StatusTypes {
 /// A class that manages Socket.IO connections.
 class SocketIOManager: ObservableObject {
     // MARK: - Published Properties
+    
     @Published var isConnected: Bool = false
     @Published var receivedMessage: String? = nil
     @Published var errorMessage: String? = nil
     @Published var operationType: String? = nil
     @Published var isOperationInProgress: Bool = false
+    @Published var status: String = "Unknown"
     
     @Published var progress: Double = 0.0 // Overall progress (folder_progress)
     @Published var currentFile: String = "Unknown"
@@ -33,6 +35,8 @@ class SocketIOManager: ObservableObject {
     @Published var drive: String = ""
     @Published var fileSize: Int = 0
     @Published var folderSize: Int = 0
+    @Published var devicesConnected: Int = 0
+    @Published var devicesLabels: [String] = []
     
     // MARK: - Private Properties
     private var manager: SocketManager
@@ -41,7 +45,7 @@ class SocketIOManager: ObservableObject {
     private var activity: Activity<FileTransferActivityAttributes>?
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.100.100:1338")!
+    private let serverURL = URL(string: "http://192.168.1.109:1338")!
     
     // MARK: - Initializer
     init() {
@@ -98,7 +102,10 @@ class SocketIOManager: ObservableObject {
             
             if let firstData = data.first as? [String: Any] {
                 DispatchQueue.main.async {
-                    self.progress = firstData["folder_progress"] as? Double ?? 0.0
+                    self.operationType = firstData["command"] as? String
+                    self.progress = firstData["folder_progress"] as? Double
+                                ?? firstData["progress"] as? Double
+                                ?? 0.0
                     self.fileProgress = firstData["file_progress"] as? Double ?? 0.0
                     self.elapsedTime = firstData["elapsed_time"] as? Double ?? 0.0
                     self.remainingTime = firstData["remaining_time"] as? Double ?? 0.0
@@ -110,8 +117,15 @@ class SocketIOManager: ObservableObject {
                     self.drive = firstData["drive"] as? String ?? ""
                     self.fileSize = firstData["file_size"] as? Int ?? 0
                     self.folderSize = firstData["folder_size"] as? Int ?? 0
-                    self.operationType = firstData["commad"] as? String ?? "unknown"
-
+                    self.status = firstData["status"] as? String ?? "unknown"
+                                        
+                    if self.operationType == "detect" {
+                        self.devicesConnected = firstData["mount_count"] as? Int ?? 0
+                        if let mountDevices = firstData["mount_dev"] as? [[String: Any]] {
+                            self.devicesLabels = self.extractLabels(from: mountDevices)
+                        }
+                    }
+                    
                     if let statusString = firstData["status"] as? String {
                         switch statusString.lowercased() {
                         case "idle":
@@ -124,6 +138,12 @@ class SocketIOManager: ObservableObject {
                         case "done":
                             self.isOperationInProgress = false
                             self.statusMessage = "Completed"
+                        case "verifying":
+                            self.statusMessage = "Verifying..."
+                        case "abort":
+                            self.isOperationInProgress = false
+                            self.operationType = "Aborting"
+                            self.statusMessage = "Operation Aborted"
                         case "error":
                             self.isOperationInProgress = false
                             self.errorMessage = "An error occurred."
@@ -140,9 +160,9 @@ class SocketIOManager: ObservableObject {
             }
         }
         
-        // Listen to all events for debugging
+        // Listen to all events (can be useful for debugging)
         socket.onAny { event in
-            print("Socket Event: \(event.event) with items: \(event.items)")
+//            print("Socket Event: \(event.event) with items: \(event.items)")
         }
     }
     
@@ -189,7 +209,7 @@ class SocketIOManager: ObservableObject {
             completion(false)
             return
         }
-        let payload: [String: Any] = ["command": operationType, "timestamp": Date().timeIntervalSince1970]
+        let payload: [String: Any] = ["command": operationType]
         
         socket.emitWithAck("message", payload).timingOut(after: 5) { data in
             if let ackData = data.first as? String, ackData.lowercased() == "ok" {
@@ -214,9 +234,9 @@ class SocketIOManager: ObservableObject {
             }
             return
         }
-        let payload: [String: Any] = ["command": "cancel", "timestamp": Date().timeIntervalSince1970]
+        let payload: [String: Any] = ["command": "abort"]
         
-        socket.emitWithAck("abort", payload).timingOut(after: 5) { data in
+        socket.emitWithAck("message", payload).timingOut(after: 5) { data in
             if let ackData = data.first as? String, ackData.lowercased() == "ok" {
                 DispatchQueue.main.async {
                     self.operationType = nil
@@ -228,6 +248,46 @@ class SocketIOManager: ObservableObject {
                 }
             }
         }
+    }
+    
+    func getDevices() {
+        guard isConnected else {
+            DispatchQueue.main.async {
+                self.errorMessage = "Socket is not connected."
+            }
+            return
+        }
+        let payload: [String: Any] = ["command": "detect"]
+        
+        socket.emitWithAck("message", payload).timingOut(after: 5) { data in
+            if let ackData = data.first as? String, ackData.lowercased() == "ok" {
+                DispatchQueue.main.async {
+    //                    self.operationType = nil
+    //                    self.resetToDefaults()
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Get devices command failed."
+                }
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    func extractLabels(from mountDevices: [[String: Any]]) -> [String] {
+        var labels: [String] = []
+        
+        for device in mountDevices {
+            if let children = device["children"] as? [[String: Any]] {
+                for child in children {
+                    if let label = child["label"] as? String, label != "<null>" {
+                        labels.append(label)
+                    }
+                }
+            }
+        }
+        
+        return labels
     }
     
     // MARK: - Deinitializer

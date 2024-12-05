@@ -9,11 +9,11 @@ struct ProgressCard: View {
 
     // Static messages array declared as a constant
     private let messages: [String] = [
-        "Starting the operation...",
-        "Performing the required tasks...",
-        "Optimizing the process...",
-        "Finalizing the operation...",
-        "Operation completed successfully!"
+        "Initializing the verification process...",
+        "Scanning files for integrity checks...",
+        "Cross-checking file hashes...",
+        "Finalizing verification...",
+        "Verification completed successfully!"
     ]
 
     var body: some View {
@@ -41,68 +41,75 @@ struct ProgressCard: View {
                     Spacer()
                 }
 
-                // Progress Logs
-                ProgressLogs(messages: messages, currentMessageIndex: currentMessageIndex)
-
                 // Overall Circular Progress Indicator
                 CircularProgressBar(
                     progress: socketIOManager.progress,
-                    operationType: socketIOManager.operationType
+                    operationType: socketIOManager.operationType,
+                    status: socketIOManager.status
                 )
                 .frame(width: 160, height: 160)
 
-                // Current File Progress
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Current File")
-                        .font(.headline)
-                        .foregroundColor(Color("Text"))
+                // Conditional content based on operationType and status
+                if socketIOManager.operationType?.lowercased() == "copy" {
+                    if socketIOManager.status.lowercased() == "running" {
+                        // Current File Progress
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Current File")
+                                .font(.headline)
+                                .foregroundColor(Color("Text"))
 
-                    Text(URL(fileURLWithPath: socketIOManager.currentFile).lastPathComponent)
-                        .font(.subheadline)
-                        .foregroundColor(Color("SubtleText"))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                            Text(URL(fileURLWithPath: socketIOManager.currentFile).lastPathComponent)
+                                .font(.subheadline)
+                                .foregroundColor(Color("SubtleText"))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
 
-                    // Individual File Progress
-                    ProgressView(value: socketIOManager.fileProgress, total: 100)
-                        .progressViewStyle(LinearProgressViewStyle(tint: Color("HighlightCyan")))
-                        .accessibility(value: Text("\(Int(socketIOManager.fileProgress)) percent"))
+                            // Individual File Progress
+                            ProgressView(value: socketIOManager.fileProgress, total: 100)
+                                .progressViewStyle(LinearProgressViewStyle(tint: Color("HighlightCyan")))
+                                .accessibility(value: Text("\(Int(socketIOManager.fileProgress)) percent"))
+                        }
+
+                        // Progress Details
+                        VStack(spacing: 15) {
+                            ProgressDetailRow(
+                                label: "Files Processed",
+                                value: "\(socketIOManager.filesProcessed) of \(socketIOManager.totalFiles)",
+                                systemImage: "doc.on.doc"
+                            )
+                            ProgressDetailRow(
+                                label: "Elapsed Time",
+                                value: formattedTime(Int(socketIOManager.elapsedTime)),
+                                systemImage: "clock"
+                            )
+                            ProgressDetailRow(
+                                label: "Remaining Time",
+                                value: formattedTime(Int(socketIOManager.remainingTime)),
+                                systemImage: "hourglass.bottomhalf.fill"
+                            )
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(Color("Background"))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 15)
+                                .stroke(Color("Outline"), lineWidth: 1)
+                        )
+
+                        // Directories Section
+                        DirectoriesSection(
+                            srcDir: socketIOManager.srcDir,
+                            destDir: socketIOManager.destDir
+                        )
+                        .padding(.top, 10)
+                    } else if socketIOManager.status.lowercased() == "verifying" {
+                        // Progress Logs
+                        ProgressLogs(messages: messages, currentMessageIndex: currentMessageIndex)
+                            .padding(.top, 10)
+                    }
                 }
-
-                // Progress Details
-                VStack(spacing: 15) {
-                    ProgressDetailRow(
-                        label: "Files Processed",
-                        value: "\(socketIOManager.filesProcessed) of \(socketIOManager.totalFiles)",
-                        systemImage: "doc.on.doc"
-                    )
-                    ProgressDetailRow(
-                        label: "Elapsed Time",
-                        value: formattedTime(Int(socketIOManager.elapsedTime)),
-                        systemImage: "clock"
-                    )
-                    ProgressDetailRow(
-                        label: "Remaining Time",
-                        value: formattedTime(Int(socketIOManager.remainingTime)),
-                        systemImage: "hourglass.bottomhalf.fill"
-                    )
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 15)
-                        .fill(Color("Background"))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 15)
-                        .stroke(Color("Outline"), lineWidth: 1)
-                )
-
-                // Directories Section
-                DirectoriesSection(
-                    srcDir: socketIOManager.srcDir,
-                    destDir: socketIOManager.destDir
-                )
-                .padding(.top, 10)
 
                 // Cancel Button
                 if socketIOManager.isOperationInProgress {
@@ -147,9 +154,12 @@ struct ProgressCard: View {
             updateCurrentMessageIndex()
         }
         .onChange(of: socketIOManager.progress) { progress in
-            if progress >= 100 {
+            if progress >= 100 && socketIOManager.status == "done" {
                 showCompletionAlert = true
             }
+            updateCurrentMessageIndex()
+        }
+        .onChange(of: socketIOManager.status) { _ in
             updateCurrentMessageIndex()
         }
     }
@@ -159,7 +169,7 @@ struct ProgressCard: View {
         switch socketIOManager.operationType?.lowercased() {
         case "copy":
             return "doc.on.doc.fill"
-        case "delete":
+        case "erase":
             return "trash.fill"
         default:
             return "gearshape.fill"
@@ -170,7 +180,7 @@ struct ProgressCard: View {
         switch socketIOManager.operationType?.lowercased() {
         case "copy":
             return Color("HighlightCyan")
-        case "delete":
+        case "erase":
             return Color.red
         default:
             return Color("SubtleText")
