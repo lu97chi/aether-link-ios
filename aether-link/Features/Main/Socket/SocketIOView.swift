@@ -23,7 +23,7 @@ struct SocketIOView: View {
                             .environmentObject(socketIOManager)
 
                         // ProgressView for initial state
-                        if socketIOManager.progress == 0 && socketIOManager.isOperationInProgress {
+                        if socketIOManager.isOperationInProgress && socketIOManager.devicesDetails.isEmpty {
                             ProgressView(socketIOManager.statusMessage)
                                 .progressViewStyle(CircularProgressViewStyle(tint: Color("PrimaryBlue")))
                                 .padding(.top, 10)
@@ -58,12 +58,6 @@ struct SocketIOView: View {
             }
         }
         .onAppear {
-            updateProgressCardVisibility()
-        }
-        .onChange(of: socketIOManager.progress) { _ in
-            updateProgressCardVisibility()
-        }
-        .onChange(of: socketIOManager.fileProgress) { _ in
             updateProgressCardVisibility()
         }
         .onChange(of: socketIOManager.isOperationInProgress) { _ in

@@ -4,8 +4,8 @@ struct ProgressCard: View {
     @EnvironmentObject var socketIOManager: SocketIOManager
     var abortOperation: () -> Void
 
-    @State private var currentMessageIndex: Int = 0
     @State private var showCompletionAlert: Bool = false
+    @State private var selectedDeviceIndex: Int = 0
 
     // Static messages array declared as a constant
     private let messages: [String] = [
@@ -20,116 +20,35 @@ struct ProgressCard: View {
         ZStack {
             VStack(spacing: 20) {
                 // Header with Icon and Operation Type
-                HStack(spacing: 15) {
-                    Image(systemName: operationIconName())
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 32, height: 32)
-                        .foregroundColor(operationIconColor())
-                        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 2)
+                HeaderView(
+                    operationType: socketIOManager.operationType,
+                    isOperationInProgress: socketIOManager.isOperationInProgress
+                )
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(socketIOManager.operationType?.capitalized ?? "Unknown Operation")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(Color("Text"))
-
-                        Text(socketIOManager.progress < 100 ? "In Progress" : "Completed")
-                            .font(.subheadline)
-                            .foregroundColor(Color("SubtleText"))
-                    }
-                    Spacer()
+                // Device Tabs
+                if socketIOManager.devicesDetails.count > 1 {
+                    let deviceLabels = socketIOManager.devicesDetails.map { $0.srcDir }
+                    DevicePickerView(selectedDeviceIndex: $selectedDeviceIndex, deviceLabels: deviceLabels)
                 }
 
-                // Overall Circular Progress Indicator
-                CircularProgressBar(
-                    progress: socketIOManager.progress,
-                    operationType: socketIOManager.operationType,
-                    status: socketIOManager.status
-                )
-                .frame(width: 160, height: 160)
+                // Get the data for the selected device
+                if socketIOManager.devicesDetails.indices.contains(selectedDeviceIndex) {
+                    let deviceDetail = socketIOManager.devicesDetails[selectedDeviceIndex]
 
-                // Conditional content based on operationType and status
-                if socketIOManager.operationType?.lowercased() == "copy" {
-                    if socketIOManager.status.lowercased() == "running" {
-                        // Current File Progress
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Current File")
-                                .font(.headline)
-                                .foregroundColor(Color("Text"))
-
-                            Text(URL(fileURLWithPath: socketIOManager.currentFile).lastPathComponent)
-                                .font(.subheadline)
-                                .foregroundColor(Color("SubtleText"))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-
-                            // Individual File Progress
-                            ProgressView(value: socketIOManager.fileProgress, total: 100)
-                                .progressViewStyle(LinearProgressViewStyle(tint: Color("HighlightCyan")))
-                                .accessibility(value: Text("\(Int(socketIOManager.fileProgress)) percent"))
-                        }
-
-                        // Progress Details
-                        VStack(spacing: 15) {
-                            ProgressDetailRow(
-                                label: "Files Processed",
-                                value: "\(socketIOManager.filesProcessed) of \(socketIOManager.totalFiles)",
-                                systemImage: "doc.on.doc"
-                            )
-                            ProgressDetailRow(
-                                label: "Elapsed Time",
-                                value: formattedTime(Int(socketIOManager.elapsedTime)),
-                                systemImage: "clock"
-                            )
-                            ProgressDetailRow(
-                                label: "Remaining Time",
-                                value: formattedTime(Int(socketIOManager.remainingTime)),
-                                systemImage: "hourglass.bottomhalf.fill"
-                            )
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 15)
-                                .fill(Color("Background"))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 15)
-                                .stroke(Color("Outline"), lineWidth: 1)
-                        )
-
-                        // Directories Section
-                        DirectoriesSection(
-                            srcDir: socketIOManager.srcDir,
-                            destDir: socketIOManager.destDir
-                        )
-                        .padding(.top, 10)
-                    } else if socketIOManager.status.lowercased() == "verifying" {
-                        // Progress Logs
-                        ProgressLogs(messages: messages, currentMessageIndex: currentMessageIndex)
-                            .padding(.top, 10)
-                    }
+                    DeviceProgressView(
+                        deviceDetail: deviceDetail,
+                        messages: messages,
+                        progress: deviceDetail.progress // 0.0 to 100.0
+                    )
+                    .transition(.slide) // Add transition for animation
+                } else {
+                    Text("No data available for this device.")
+                        .foregroundColor(Color("SubtleText"))
                 }
 
                 // Cancel Button
                 if socketIOManager.isOperationInProgress {
-                    Button(action: {
-                        cancelOperation()
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.headline)
-                            Text("Cancel")
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(Color.white)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color("DangerRed"))
-                        .cornerRadius(12)
-                        .shadow(color: Color("DangerRed").opacity(0.3), radius: 5, x: 0, y: 2)
-                    }
-                    .accessibility(label: Text("Cancel Operation"))
+                    CancelButtonView(abortOperation: abortOperation)
                 }
             }
             .padding()
@@ -142,6 +61,30 @@ struct ProgressCard: View {
                     .stroke(Color("Outline"), lineWidth: 1)
             )
             .padding(.horizontal)
+            // Attach DragGesture here
+            .gesture(
+                DragGesture()
+                    .onEnded { value in
+                        let horizontalAmount = value.translation.width
+                        if abs(horizontalAmount) < 50 { return } // Ignore small swipes
+
+                        if horizontalAmount < 0 {
+                            // Swipe Left: Next Tab
+                            if selectedDeviceIndex < socketIOManager.devicesDetails.count - 1 {
+                                withAnimation(.easeInOut) {
+                                    selectedDeviceIndex += 1
+                                }
+                            }
+                        } else {
+                            // Swipe Right: Previous Tab
+                            if selectedDeviceIndex > 0 {
+                                withAnimation(.easeInOut) {
+                                    selectedDeviceIndex -= 1
+                                }
+                            }
+                        }
+                    }
+            )
         }
         .alert(isPresented: $showCompletionAlert) {
             Alert(
@@ -151,65 +94,17 @@ struct ProgressCard: View {
             )
         }
         .onAppear {
-            updateCurrentMessageIndex()
+            // Initial setup if needed
         }
-        .onChange(of: socketIOManager.progress) { progress in
-            if progress >= 100 && socketIOManager.status == "done" {
-                showCompletionAlert = true
+        .onChange(of: socketIOManager.devicesDetails) { _ in
+            // Update the selected device index if needed
+            if selectedDeviceIndex >= socketIOManager.devicesDetails.count {
+                selectedDeviceIndex = 0
             }
-            updateCurrentMessageIndex()
         }
-        .onChange(of: socketIOManager.status) { _ in
-            updateCurrentMessageIndex()
-        }
-    }
-
-    // MARK: - Helper Methods
-    private func operationIconName() -> String {
-        switch socketIOManager.operationType?.lowercased() {
-        case "copy":
-            return "doc.on.doc.fill"
-        case "erase":
-            return "trash.fill"
-        default:
-            return "gearshape.fill"
-        }
-    }
-
-    private func operationIconColor() -> Color {
-        switch socketIOManager.operationType?.lowercased() {
-        case "copy":
-            return Color("HighlightCyan")
-        case "erase":
-            return Color.red
-        default:
-            return Color("SubtleText")
-        }
-    }
-
-    private func cancelOperation() {
-        abortOperation()
-    }
-
-    private func formattedTime(_ time: Int) -> String {
-        let formatter = DateComponentsFormatter()
-        formatter.unitsStyle = .abbreviated
-        formatter.allowedUnits = [.hour, .minute, .second]
-        return formatter.string(from: TimeInterval(time)) ?? "--"
-    }
-
-    private func updateCurrentMessageIndex() {
-        guard !messages.isEmpty else {
-            currentMessageIndex = 0
-            return
-        }
-        let totalMessages = messages.count
-        let progress = socketIOManager.progress
-        let calculatedIndex = Int((progress / 100.0) * Double(totalMessages))
-        let newIndex = min(calculatedIndex, totalMessages - 1)
-        if newIndex != currentMessageIndex {
-            withAnimation(.easeInOut) {
-                currentMessageIndex = newIndex
+        .onChange(of: socketIOManager.isOperationInProgress) { inProgress in
+            if !inProgress {
+                showCompletionAlert = true
             }
         }
     }

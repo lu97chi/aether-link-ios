@@ -13,7 +13,6 @@ enum StatusTypes {
 /// A class that manages Socket.IO connections.
 class SocketIOManager: ObservableObject {
     // MARK: - Published Properties
-    
     @Published var isConnected: Bool = false
     @Published var receivedMessage: String? = nil
     @Published var errorMessage: String? = nil
@@ -21,22 +20,62 @@ class SocketIOManager: ObservableObject {
     @Published var isOperationInProgress: Bool = false
     @Published var status: String = "Unknown"
     
-    @Published var progress: Double = 0.0 // Overall progress (folder_progress)
-    @Published var currentFile: String = "Unknown"
-    @Published var filesProcessed: Int = 0
-    @Published var totalFiles: Int = 0
-    @Published var fileProgress: Double = 0.0 // Per-file progress (file_progress)
-    @Published var elapsedTime: Double = 0.0
-    @Published var remainingTime: Double = 0.0
     @Published var statusMessage: String = "Processing..."
-    
-    @Published var srcDir: String = ""
-    @Published var destDir: String = ""
-    @Published var drive: String = ""
-    @Published var fileSize: Int = 0
-    @Published var folderSize: Int = 0
     @Published var devicesConnected: Int = 0
-    @Published var devicesLabels: [String] = []
+    @Published var devicesDetails: [DeviceDetail] = []
+    
+    // MARK: - DeviceDetail Struct
+    struct DeviceDetail: Identifiable, Equatable {
+        var id: String // Use src_dir as the unique ID
+        var progress: Double
+        var fileProgress: Double
+        var elapsedTime: Double
+        var remainingTime: Double
+        var currentFile: String
+        var filesProcessed: Int
+        var totalFiles: Int
+        var srcDir: String
+        var destDir: String
+        var drive: String
+        var fileSize: Int
+        var folderSize: Int
+        var operationType: String?
+        var status: String
+
+        // Initializer to ensure id is always set to srcDir
+        init(
+            progress: Double,
+            fileProgress: Double,
+            elapsedTime: Double,
+            remainingTime: Double,
+            currentFile: String,
+            filesProcessed: Int,
+            totalFiles: Int,
+            srcDir: String,
+            destDir: String,
+            drive: String,
+            fileSize: Int,
+            folderSize: Int,
+            operationType: String?,
+            status: String
+        ) {
+            self.id = srcDir // Set id to srcDir
+            self.progress = progress
+            self.fileProgress = fileProgress
+            self.elapsedTime = elapsedTime
+            self.remainingTime = remainingTime
+            self.currentFile = currentFile
+            self.filesProcessed = filesProcessed
+            self.totalFiles = totalFiles
+            self.srcDir = srcDir
+            self.destDir = destDir
+            self.drive = drive
+            self.fileSize = fileSize
+            self.folderSize = folderSize
+            self.operationType = operationType
+            self.status = status
+        }
+    }
     
     // MARK: - Private Properties
     private var manager: SocketManager
@@ -50,7 +89,7 @@ class SocketIOManager: ObservableObject {
     // MARK: - Initializer
     init() {
         manager = SocketManager(socketURL: serverURL, config: [
-            .log(true),
+//                .log(true),
             .compress,
             .forceWebsockets(true)
         ])
@@ -68,6 +107,7 @@ class SocketIOManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.isConnected = true
                 self?.errorMessage = nil
+                self?.getDevices()
             }
         }
         
@@ -103,83 +143,86 @@ class SocketIOManager: ObservableObject {
             if let firstData = data.first as? [String: Any] {
                 DispatchQueue.main.async {
                     self.operationType = firstData["command"] as? String
-                    self.progress = firstData["folder_progress"] as? Double
-                                ?? firstData["progress"] as? Double
-                                ?? 0.0
-                    self.fileProgress = firstData["file_progress"] as? Double ?? 0.0
-                    self.elapsedTime = firstData["elapsed_time"] as? Double ?? 0.0
-                    self.remainingTime = firstData["remaining_time"] as? Double ?? 0.0
-                    self.currentFile = firstData["file"] as? String ?? "Unknown"
-                    self.filesProcessed = firstData["proc_files"] as? Int ?? 0
-                    self.totalFiles = firstData["total_files"] as? Int ?? 0
-                    self.srcDir = firstData["src_dir"] as? String ?? ""
-                    self.destDir = firstData["dest_dir"] as? String ?? ""
-                    self.drive = firstData["drive"] as? String ?? ""
-                    self.fileSize = firstData["file_size"] as? Int ?? 0
-                    self.folderSize = firstData["folder_size"] as? Int ?? 0
                     self.status = firstData["status"] as? String ?? "unknown"
-                                        
-                    if self.operationType == "detect" {
-                        self.devicesConnected = firstData["mount_count"] as? Int ?? 0
-                        if let mountDevices = firstData["mount_dev"] as? [[String: Any]] {
-                            self.devicesLabels = self.extractLabels(from: mountDevices)
-                        }
+                
+                    if self.status == "idle" { return }
+                    
+                    // Check if the detect commands contain mount_count property
+                    if self.operationType == "detect", let mountCount = firstData["mount_count"] as? Int {
+                        self.devicesConnected = mountCount
                     }
                     
-                    if let statusString = firstData["status"] as? String {
-                        switch statusString.lowercased() {
-                        case "idle":
-                            self.isOperationInProgress = false
-                            self.resetToDefaults()
-                            self.statusMessage = "Idle"
-                        case "running":
-                            self.isOperationInProgress = true
-                            self.statusMessage = "Running"
-                        case "done":
-                            self.isOperationInProgress = false
-                            self.statusMessage = "Completed"
-                        case "verifying":
-                            self.statusMessage = "Verifying..."
-                        case "abort":
-                            self.isOperationInProgress = false
-                            self.operationType = "Aborting"
-                            self.statusMessage = "Operation Aborted"
-                        case "error":
-                            self.isOperationInProgress = false
-                            self.errorMessage = "An error occurred."
-                            self.statusMessage = "Error"
-                        default:
-                            self.statusMessage = "Unknown Status"
+                    if self.operationType == "copy" {
+                        // Parse per-device progress data
+                        if let devicesData = firstData["devices_data"] as? [[String: Any]] {
+                            for deviceData in devicesData {
+                                guard let srcDir = deviceData["src_dir"] as? String else {
+                                    continue // Skip if src_dir is missing
+                                }
+
+                                // Update or add device detail
+                                self.updateDeviceDetail(with: deviceData, srcDir: srcDir)
+                            }
+                        } else {
+                            // If devices_data is not present, assume single device data
+                            self.updateDeviceDetail(with: firstData, srcDir: firstData["src_dir"] as? String)
                         }
-                    } else {
-                        self.statusMessage = "Unknown Status"
                     }
+                    // Handle overall status
+                    self.updateStatus(firstData)
                 }
             } else {
                 print("Invalid status data received: \(data)")
             }
         }
         
-        // Listen to all events (can be useful for debugging)
+        // Listen to all events for debugging
         socket.onAny { event in
-//            print("Socket Event: \(event.event) with items: \(event.items)")
+            print("Socket Event: \(event.event) with items: \(event.items ?? [])")
         }
     }
     
+    // MARK: - Update Status Method
+    private func updateStatus(_ data: [String: Any]) {
+        if let statusString = data["status"] as? String {
+            switch statusString.lowercased() {
+            case "idle":
+                self.isOperationInProgress = false
+                self.resetToDefaults()
+                self.statusMessage = "Idle"
+            case "running":
+                self.isOperationInProgress = true
+                self.statusMessage = "Running"
+            case "done":
+                self.isOperationInProgress = false
+                self.statusMessage = "Completed"
+            case "verifying":
+                self.statusMessage = "Verifying..."
+            case "abort":
+                self.isOperationInProgress = false
+                self.operationType = "Aborting"
+                self.statusMessage = "Operation Aborted"
+            case "error":
+                self.isOperationInProgress = false
+                self.errorMessage = "An error occurred."
+                self.statusMessage = "Error"
+            default:
+                self.statusMessage = "Unknown Status"
+            }
+        } else {
+            self.statusMessage = "Unknown Status"
+        }
+    }
+    
+    // MARK: - Reset Method
     func resetToDefaults() {
-        self.progress = 0
-        self.fileProgress = 0.0
-        self.currentFile = "Unknown"
-        self.filesProcessed = 0
-        self.totalFiles = 0
-        self.elapsedTime = 0.0
-        self.remainingTime = 0.0
+        self.devicesDetails.removeAll()
         self.statusMessage = "Processing..."
-        self.srcDir = ""
-        self.destDir = ""
-        self.drive = ""
-        self.fileSize = 0
-        self.folderSize = 0
+    }
+    
+    // MARK: - Get Device Detail
+    func getDeviceDetail(forSrcDir srcDir: String) -> DeviceDetail? {
+        return devicesDetails.first(where: { $0.id == srcDir })
     }
     
     // MARK: - Connect to Socket
@@ -250,6 +293,7 @@ class SocketIOManager: ObservableObject {
         }
     }
     
+    // MARK: - Get Devices Command
     func getDevices() {
         guard isConnected else {
             DispatchQueue.main.async {
@@ -261,10 +305,7 @@ class SocketIOManager: ObservableObject {
         
         socket.emitWithAck("message", payload).timingOut(after: 5) { data in
             if let ackData = data.first as? String, ackData.lowercased() == "ok" {
-                DispatchQueue.main.async {
-    //                    self.operationType = nil
-    //                    self.resetToDefaults()
-                }
+                // Devices will be updated via the "status" event
             } else {
                 DispatchQueue.main.async {
                     self.errorMessage = "Get devices command failed."
@@ -276,7 +317,7 @@ class SocketIOManager: ObservableObject {
     // MARK: - Helper Methods
     func extractLabels(from mountDevices: [[String: Any]]) -> [String] {
         var labels: [String] = []
-        
+
         for device in mountDevices {
             if let children = device["children"] as? [[String: Any]] {
                 for child in children {
@@ -286,8 +327,65 @@ class SocketIOManager: ObservableObject {
                 }
             }
         }
-        
+
         return labels
+    }
+    
+    // MARK: - Update Device Detail Method
+    private func updateDeviceDetail(with deviceData: [String: Any], srcDir: String?) {
+        guard let srcDir = srcDir else { return }
+
+        // Extract necessary fields with default values
+        let progress = deviceData["folder_progress"] as? Double ?? deviceData["progress"] as? Double ?? 0.0
+        let fileProgress = deviceData["file_progress"] as? Double ?? 0.0
+        let elapsedTime = deviceData["elapsed_time"] as? Double ?? 0.0
+        let remainingTime = deviceData["remaining_time"] as? Double ?? 0.0
+        let currentFile = deviceData["file"] as? String ?? "Unknown"
+        let filesProcessed = deviceData["proc_files"] as? Int ?? 0
+        let totalFiles = deviceData["total_files"] as? Int ?? 0
+        let destDir = deviceData["dest_dir"] as? String ?? ""
+        let drive = deviceData["drive"] as? String ?? ""
+        let fileSize = deviceData["file_size"] as? Int ?? 0
+        let folderSize = deviceData["folder_size"] as? Int ?? 0
+        let operationType = deviceData["command"] as? String
+        let status = deviceData["status"] as? String ?? "unknown"
+
+        // Check if the device already exists
+        if let index = self.devicesDetails.firstIndex(where: { $0.id == srcDir }) {
+            // Update existing device
+            self.devicesDetails[index].progress = progress
+            self.devicesDetails[index].fileProgress = fileProgress
+            self.devicesDetails[index].elapsedTime = elapsedTime
+            self.devicesDetails[index].remainingTime = remainingTime
+            self.devicesDetails[index].currentFile = currentFile
+            self.devicesDetails[index].filesProcessed = filesProcessed
+            self.devicesDetails[index].totalFiles = totalFiles
+            self.devicesDetails[index].destDir = destDir
+            self.devicesDetails[index].drive = drive
+            self.devicesDetails[index].fileSize = fileSize
+            self.devicesDetails[index].folderSize = folderSize
+            self.devicesDetails[index].operationType = operationType
+            self.devicesDetails[index].status = status
+        } else {
+            // Add new device
+            let newDevice = DeviceDetail(
+                progress: progress,
+                fileProgress: fileProgress,
+                elapsedTime: elapsedTime,
+                remainingTime: remainingTime,
+                currentFile: currentFile,
+                filesProcessed: filesProcessed,
+                totalFiles: totalFiles,
+                srcDir: srcDir,
+                destDir: destDir,
+                drive: drive,
+                fileSize: fileSize,
+                folderSize: folderSize,
+                operationType: operationType,
+                status: status
+            )
+            self.devicesDetails.append(newDevice)
+        }
     }
     
     // MARK: - Deinitializer
