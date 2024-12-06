@@ -44,6 +44,16 @@ struct DeviceProgressView: View {
                             systemImage: "doc.on.doc"
                         )
                         ProgressDetailRow(
+                            label: "File Size",
+                            value: formatSize(deviceDetail.fileSize),
+                            systemImage: "doc.text"
+                        )
+                        ProgressDetailRow(
+                            label: "Folder Size",
+                            value: formatSize(deviceDetail.folderSize),
+                            systemImage: "folder"
+                        )
+                        ProgressDetailRow(
                             label: "Elapsed Time",
                             value: formattedTime(Int(deviceDetail.elapsedTime)),
                             systemImage: "clock"
@@ -85,10 +95,38 @@ struct DeviceProgressView: View {
         }
     }
 
+    // Helper method to format time from seconds to mm:ss
     private func formattedTime(_ time: Int) -> String {
         let formatter = DateComponentsFormatter()
         formatter.unitsStyle = .abbreviated
         formatter.allowedUnits = [.hour, .minute, .second]
         return formatter.string(from: TimeInterval(time)) ?? "--"
+    }
+
+    // Helper method to format size from bytes to MB
+    private func formatSize(_ size: Int) -> String {
+        guard size > 0 else { return "0.00 MB" }
+        let mbSize = Double(size) / (1024.0 * 1024.0)
+        return String(format: "%.2f MB", mbSize)
+    }
+
+    // Helper method to determine color based on status
+    private func colorForStatus(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "idle":
+            return .gray
+        case "running":
+            return .blue
+        case "done":
+            return .green
+        case "verifying":
+            return .orange
+        case "abort":
+            return .red
+        case "error":
+            return .red
+        default:
+            return .black
+        }
     }
 }

@@ -27,8 +27,15 @@ struct ProgressCard: View {
 
                 // Device Tabs
                 if socketIOManager.devicesDetails.count > 1 {
+                    // Use 'label' instead of 'srcDir' for friendly names
                     let deviceLabels = socketIOManager.devicesDetails.map { $0.srcDir }
                     DevicePickerView(selectedDeviceIndex: $selectedDeviceIndex, deviceLabels: deviceLabels)
+                        .transition(.opacity) // Smooth transition for device tabs
+                } else if socketIOManager.devicesDetails.count == 1 {
+                    // If only one device, display its label directly
+                    Text(socketIOManager.devicesDetails.first?.srcDir ?? "Device")
+                        .font(.headline)
+                        .padding()
                 }
 
                 // Get the data for the selected device
@@ -41,6 +48,11 @@ struct ProgressCard: View {
                         progress: deviceDetail.progress // 0.0 to 100.0
                     )
                     .transition(.slide) // Add transition for animation
+                    .onChange(of: deviceDetail.progress) { newValue in
+                        if newValue >= 100.0 {
+                            moveToNextTab()
+                        }
+                    }
                 } else {
                     Text("No data available for this device.")
                         .foregroundColor(Color("SubtleText"))
@@ -94,18 +106,39 @@ struct ProgressCard: View {
             )
         }
         .onAppear {
-            // Initial setup if needed
-        }
-        .onChange(of: socketIOManager.devicesDetails) { _ in
-            // Update the selected device index if needed
-            if selectedDeviceIndex >= socketIOManager.devicesDetails.count {
+            // Automatically select the first device if available
+            if !socketIOManager.devicesDetails.isEmpty {
                 selectedDeviceIndex = 0
             }
         }
+        .onChange(of: socketIOManager.devicesDetails) { newDevices in
+            // If devices are updated (e.g., upon detection), reset selectedDeviceIndex if out of bounds
+            if selectedDeviceIndex >= newDevices.count {
+                selectedDeviceIndex = max(0, newDevices.count - 1)
+            }
+        }
         .onChange(of: socketIOManager.isOperationInProgress) { inProgress in
-            if !inProgress {
+            if !inProgress && socketIOManager.status.lowercased() == "done" {
                 showCompletionAlert = true
             }
         }
     }
+
+    // MARK: - Move to Next Tab Function
+    private func moveToNextTab() {
+        if selectedDeviceIndex < socketIOManager.devicesDetails.count - 1 {
+            withAnimation(.easeInOut) {
+                selectedDeviceIndex += 1
+            }
+        } else {
+            print("✅ All devices have completed their operations.")
+            // Optionally, you can reset to the first device or perform another action
+            // For example, reset to the first device:
+            // withAnimation(.easeInOut) {
+            //     selectedDeviceIndex = 0
+            // }
+            // Or trigger a final completion alert
+        }
+    }
 }
+

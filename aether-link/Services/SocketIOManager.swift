@@ -3,13 +3,6 @@ import SocketIO
 import Combine
 import ActivityKit
 
-enum StatusTypes {
-    case idle
-    case running
-    case done
-    case error
-}
-
 /// A class that manages Socket.IO connections.
 class SocketIOManager: ObservableObject {
     // MARK: - Published Properties
@@ -84,12 +77,12 @@ class SocketIOManager: ObservableObject {
     private var activity: Activity<FileTransferActivityAttributes>?
     
     // Replace with your actual server URL
-    private let serverURL = URL(string: "http://192.168.1.109:1338")!
+    private let serverURL = URL(string: "http://192.168.0.106:1338")!
     
     // MARK: - Initializer
     init() {
         manager = SocketManager(socketURL: serverURL, config: [
-//                .log(true),
+            //.log(true),
             .compress,
             .forceWebsockets(true)
         ])
@@ -103,7 +96,7 @@ class SocketIOManager: ObservableObject {
     private func setupSocketEvents() {
         // Handle connection
         socket.on(clientEvent: .connect) { [weak self] _, _ in
-            print("Socket connected")
+            print("✅ Socket connected")
             DispatchQueue.main.async {
                 self?.isConnected = true
                 self?.errorMessage = nil
@@ -113,7 +106,7 @@ class SocketIOManager: ObservableObject {
         
         // Handle disconnection
         socket.on(clientEvent: .disconnect) { [weak self] _, _ in
-            print("Socket disconnected")
+            print("⚠️ Socket disconnected")
             DispatchQueue.main.async {
                 self?.isConnected = false
             }
@@ -121,7 +114,7 @@ class SocketIOManager: ObservableObject {
         
         // Handle error
         socket.on(clientEvent: .error) { [weak self] data, _ in
-            print("Socket error: \(data)")
+            print("❌ Socket error: \(data)")
             DispatchQueue.main.async {
                 self?.errorMessage = "Socket error occurred."
             }
@@ -140,46 +133,98 @@ class SocketIOManager: ObservableObject {
         socket.on("status") { [weak self] data, _ in
             guard let self = self else { return }
             
-            if let firstData = data.first as? [String: Any] {
-                DispatchQueue.main.async {
-                    self.operationType = firstData["command"] as? String
-                    self.status = firstData["status"] as? String ?? "unknown"
+            if let firstData = data.first as? [String: Any],
+               let command = firstData["command"] as? String,
+               let statusString = firstData["status"] as? String {
                 
-                    if self.status == "idle" { return }
+                DispatchQueue.main.async {
+                    self.operationType = command
+                    self.status = statusString.lowercased()
                     
-                    // Check if the detect commands contain mount_count property
-                    if self.operationType == "detect", let mountCount = firstData["mount_count"] as? Int {
-                        self.devicesConnected = mountCount
-                    }
-                    
-                    if self.operationType == "copy" {
-                        // Parse per-device progress data
-                        if let devicesData = firstData["devices_data"] as? [[String: Any]] {
-                            for deviceData in devicesData {
-                                guard let srcDir = deviceData["src_dir"] as? String else {
-                                    continue // Skip if src_dir is missing
-                                }
-
-                                // Update or add device detail
-                                self.updateDeviceDetail(with: deviceData, srcDir: srcDir)
-                            }
+                    if command.lowercased() == "detect" {
+                        // Handle detect command response
+                        if statusString.lowercased() == "done",
+                           let mountDevices = firstData["mount_dev"] as? [[String: Any]] {
+                            
+                            self.devicesConnected = mountDevices.count
+                            self.initializeDevicesDetails(with: mountDevices)
+                            self.statusMessage = "Devices Detected"
                         } else {
-                            // If devices_data is not present, assume single device data
-                            self.updateDeviceDetail(with: firstData, srcDir: firstData["src_dir"] as? String)
+                            // Handle other statuses if necessary
+                            self.statusMessage = "Detect Status: \(statusString)"
                         }
+                    } else if command.lowercased() == "copy" {
+                        // Handle copy command
+                        if self.status != "idle" {
+                            if let devicesData = firstData["devices_data"] as? [[String: Any]] {
+                                for deviceData in devicesData {
+                                    guard let srcDir = deviceData["src_dir"] as? String else {
+                                        continue // Skip if src_dir is missing
+                                    }
+    
+                                    // Update or add device detail
+                                    self.updateDeviceDetail(with: deviceData, srcDir: srcDir)
+                                }
+                            } else {
+                                // If devices_data is not present, assume single device data
+                                self.updateDeviceDetail(with: firstData, srcDir: firstData["src_dir"] as? String)
+                            }
+                        }
+                        
+                        // Handle overall status
+                        self.updateStatus(firstData)
+                    } else {
+                        // Handle other commands if necessary
+                        self.updateStatus(firstData)
                     }
-                    // Handle overall status
-                    self.updateStatus(firstData)
                 }
             } else {
-                print("Invalid status data received: \(data)")
+                print("⚠️ Invalid status data received: \(data)")
             }
         }
         
         // Listen to all events for debugging
         socket.onAny { event in
-            print("Socket Event: \(event.event) with items: \(event.items ?? [])")
+            print("🔔 Socket Event: \(event.event) with items: \(event.items ?? [])")
         }
+    }
+    
+    // MARK: - Initialize Devices Details
+    private func initializeDevicesDetails(with mountDevices: [[String: Any]]) {
+        // Clear existing device details to avoid duplicates
+        self.devicesDetails.removeAll()
+        
+        for device in mountDevices {
+            guard let label = device["label"] as? String,
+                  let mountpoint = device["mountpoint"] as? String,
+                  let name = device["name"] as? String,
+                  let size = device["size"] as? String else {
+                print("⚠️ Incomplete device data: \(device)")
+                continue
+            }
+            
+            // Initialize DeviceDetail with default progress values
+            let newDevice = DeviceDetail(
+                progress: 0.0,
+                fileProgress: 0.0,
+                elapsedTime: 0.0,
+                remainingTime: 0.0,
+                currentFile: "Idle",
+                filesProcessed: 0,
+                totalFiles: 0,
+                srcDir: mountpoint,
+                destDir: "",
+                drive: "", // Populate if available
+                fileSize: 0,
+                folderSize: 0,
+                operationType: nil,
+                status: "idle"
+            )
+            
+            self.devicesDetails.append(newDevice)
+        }
+        
+        print("✅ Initialized devicesDetails with \(self.devicesDetails.count) devices.")
     }
     
     // MARK: - Update Status Method
@@ -228,7 +273,7 @@ class SocketIOManager: ObservableObject {
     // MARK: - Connect to Socket
     func connect() {
         guard !isConnected else {
-            print("Socket is already connected.")
+            print("🔄 Socket is already connected.")
             return
         }
         socket.connect()
@@ -237,7 +282,7 @@ class SocketIOManager: ObservableObject {
     // MARK: - Disconnect from Socket
     func disconnect() {
         guard isConnected else {
-            print("Socket is not connected.")
+            print("❌ Socket is not connected.")
             return
         }
         socket.disconnect()
@@ -306,10 +351,12 @@ class SocketIOManager: ObservableObject {
         socket.emitWithAck("message", payload).timingOut(after: 5) { data in
             if let ackData = data.first as? String, ackData.lowercased() == "ok" {
                 // Devices will be updated via the "status" event
+                print("✅ 'detect' command acknowledged with 'ok'")
             } else {
                 DispatchQueue.main.async {
                     self.errorMessage = "Get devices command failed."
                 }
+                print("❌ 'detect' command failed or no acknowledgment")
             }
         }
     }

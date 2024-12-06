@@ -1,0 +1,45 @@
+# config.yaml
+
+app:
+  name: ÆtherL
+  version: "1.0.0"
+
+server:
+  url: "http://192.168.1.109:1338"
+  timeout: 5  # in seconds
+  periodic_refresh_interval: 30  # in seconds
+
+commands:
+  copy: "copy"
+  erase: "erase"
+  detect: "detect"
+  abort: "abort"
+
+statuses:
+  idle: "idle"
+  running: "running"
+  done: "done"
+  verifying: "verifying"
+  abort: "abort"
+  error: "error"
+  unknown: "unknown"
+
+socket_events:
+  message: "message"
+  status: "status"
+
+response_properties:
+  command: "command"
+  status: "status"
+  drive: "drive"
+  src_dir: "src_dir"
+  dest_dir: "dest_dir"
+  file: "file"
+  file_size: "file_size"
+  file_progress: "file_progress"
+  proc_files: "proc_files"
+  total_files: "total_files"
+  folder_size: "folder_size"
+  folder_progress: "folder_progress"
+  elapsed_time: "elapsed_time"
+  remaining_time: "remaining_time"
