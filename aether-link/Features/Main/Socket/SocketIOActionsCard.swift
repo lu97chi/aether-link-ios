@@ -7,13 +7,47 @@ struct SocketIOActionsCard: View {
     @State private var showDeleteConfirmation: Bool = false // State to show confirmation dialog
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 25) {
-            // Title
-            Text("Actions")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(Color("Text"))
-                .padding(.bottom, 10)
+        VStack(alignment: .leading, spacing: 20) {
+            // Header with Title, Devices Connected, and Refresh Button
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Actions")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color("Text"))
+
+                    // Devices Connected Info
+                    HStack(spacing: 6) {
+                        Image(systemName: "externaldrive")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 16, height: 16)
+                            .foregroundColor(Color("SubtleText"))
+
+                        Text(devicesConnectedText())
+                            .font(.subheadline)
+                            .foregroundColor(Color("SubtleText"))
+                    }
+                }
+
+                Spacer()
+
+                // Refresh Button
+                Button(action: {
+                    sendMessage(message: "refresh")
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.title2)
+                        .foregroundColor(Color("PrimaryBlue"))
+                }
+                .disabled(!socketIOManager.isConnected || socketIOManager.isOperationInProgress)
+                .accessibilityLabel("Refresh")
+                .padding(.trailing, 5)
+            }
+            .padding(.bottom, 10)
+
+            // Divider
+            Divider()
 
             // Buttons
             HStack(spacing: 20) {
@@ -30,7 +64,7 @@ struct SocketIOActionsCard: View {
 
                 // Delete Button
                 ActionButton(
-                    title: "Delete",
+                    title: "Erase",
                     icon: "trash.fill",
                     style: .danger,
                     action: {
@@ -54,20 +88,36 @@ struct SocketIOActionsCard: View {
         .padding(.horizontal)
         .animation(.easeInOut(duration: 0.5), value: socketIOManager.isOperationInProgress)
         .confirmationDialog(
-            "Are you sure you want to delete?",
+            "Are you sure you want to erase?",
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
             Button("Delete", role: .destructive) {
-                sendMessage(message: "delete")
+                sendMessage(message: "erase")
             }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    // MARK: - Helper Methods
+    private func devicesConnectedText() -> String {
+        let count = socketIOManager.devicesConnected
+        if count == 0 {
+            return "No devices connected"
+        } else if count == 1 {
+            return "1 device connected"
+        } else {
+            return "\(count) devices connected"
         }
     }
 
     // MARK: - Action Methods
     private func sendMessage(message: String) {
         guard !socketIOManager.isOperationInProgress else { return }
+        if message == "refresh" {
+            socketIOManager.getDevices()
+            return
+        }
         socketIOManager.isOperationInProgress = true
         socketIOManager.sendMessage(operationType: message) { success in
             if !success {
